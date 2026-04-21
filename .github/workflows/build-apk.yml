@@ -1,0 +1,160 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4096m"
+      JAVA_TOOL_OPTIONS: "-Xmx4096m"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.1.12297006'
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Configure Gradle memory globally
+        run: |
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError
+          org.gradle.parallel=true
+          org.gradle.daemon=false
+          org.gradle.caching=true
+          android.useAndroidX=true
+          android.enableJetifier=false
+          EOF
+          echo "✅ gradle.properties configured"
+          cat ~/.gradle/gradle.properties
+
+      - name: Install JS dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Verify Expo project
+        run: npx expo-doctor || echo "::warning::expo-doctor warnings ignored"
+
+      - name: Expo prebuild (generate native android project)
+        run: npx expo prebuild --platform android --clean --no-install
+        env:
+          CI: true
+
+      - name: Make gradlew executable
+        run: chmod +x ./android/gradlew
+
+      - name: Print Gradle environment (debug)
+        working-directory: ./android
+        run: |
+          ./gradlew --version
+          echo "---"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "JAVA_HOME=$JAVA_HOME"
+
+      - name: Build debug APK
+        id: gradle_build
+        working-directory: ./android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+        continue-on-error: true
+
+      - name: Upload Gradle build log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: |
+            android/build.log
+            android/app/build/outputs/logs/
+            android/build/reports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Show last 200 lines of build log on failure
+        if: steps.gradle_build.outcome == 'failure'
+        working-directory: ./android
+        run: |
+          echo "::group::Last 200 lines of Gradle output"
+          tail -n 200 build.log || true
+          echo "::endgroup::"
+          echo "::error::Gradle build failed — check the 'gradle-build-log' artifact above for full output"
+          exit 1
+
+      - name: Verify APK was produced
+        run: |
+          test -f android/app/build/outputs/apk/debug/app-debug.apk \
+            || (echo "::error::APK not found" && exit 1)
+          ls -lh android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Rename APK
+        run: |
+          mkdir -p ./output
+          cp android/app/build/outputs/apk/debug/app-debug.apk ./output/H0sS-Money-v${{ github.run_number }}.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk ./output/H0sS-Money-latest.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: H0sS-Money-APK-build-${{ github.run_number }}
+          path: ./output/H0sS-Money-v${{ github.run_number }}.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: H0sS-Money Build ${{ github.run_number }}
+          body: |
+            ## H0sS-Money Android APK
+            - Build #${{ github.run_number }}
+            - Commit: ${{ github.sha }}
+
+            **Install:** Download `H0sS-Money-v${{ github.run_number }}.apk` and open on your Android phone.
+          files: |
+            ./output/H0sS-Money-v${{ github.run_number }}.apk
+            ./output/H0sS-Money-latest.apk
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

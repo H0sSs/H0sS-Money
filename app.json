@@ -1,0 +1,85 @@
+{
+  "expo": {
+    "name": "H0sS-Money",
+    "slug": "hoss-money",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "hossmoney",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.hossmoney.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "H0sS-Money يحتاج الميكروفون لتسجيل المصاريف بالصوت.",
+        "NSSpeechRecognitionUsageDescription": "H0sS-Money يستخدم تقنية التعرف على الصوت لتحويل كلامك إلى نص.",
+        "NSFaceIDUsageDescription": "H0sS-Money يستخدم Face ID لحماية بياناتك المالية."
+      }
+    },
+    "android": {
+      "package": "com.hossmoney.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "edgeToEdgeEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.VIBRATE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "H0sS-Money يستخدم Face ID لحماية بياناتك المالية."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "H0sS-Money يحتاج للوصول لمكتبة الصور لرفع الشعار."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "H0sS-Money يحتاج الميكروفون لتسجيل المصاريف بالصوت."
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "color": "#F0B429"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false,
+      "reactCompiler": false
+    }
+  }
+}

@@ -19,7 +19,7 @@ import {
   requestNotificationPermission,
   setNotificationsEnabled,
 } from "@/lib/notifications";
-import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { DarkColors } from "@/lib/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Icon from "@/components/Icon";
@@ -95,6 +95,17 @@ const lock = StyleSheet.create({
   btn: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 20, marginTop: 16 },
   btnText: { fontSize: 17, fontWeight: "700" },
 });
+
+function ThemedNavigator() {
+  const { isDark, colors } = useTheme();
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+      <Stack screenOptions={{ headerShown: false, statusBarStyle: isDark ? "light" : "dark" }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      </Stack>
+    </GestureHandlerRootView>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -215,11 +226,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              </Stack>
-            </GestureHandlerRootView>
+            <ThemedNavigator />
           </ThemeProvider>
         </QueryClientProvider>
       </ErrorBoundary>

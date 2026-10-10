@@ -58,11 +58,20 @@
     "react-native-svg": "15.12.1",
     "react-native-view-shot": "4.0.3",
     "react-native-web": "^0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "decode-uri-component": "file:vendor/decode-uri-component"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.1.10",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "image-size-core": "npm:image-size@2.0.4",
+    "image-size": "file:vendor/image-size"
+  },
+  "overrides": {
+    "decode-uri-component": "$decode-uri-component",
+    "postcss": "8.5.29",
+    "uuid": "11.1.1",
+    "image-size": "$image-size"
   }
 }

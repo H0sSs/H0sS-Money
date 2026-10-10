@@ -27,11 +27,23 @@ def screenshot(name):
     adb('shell','uiautomator','dump','/sdcard/window.xml')
     adb('pull','/sdcard/window.xml',f'smoke/{name}.xml')
 
+def scroll_body(down=True):
+    size = list(map(int, re.findall(r'(\d+)x(\d+)', adb('shell','wm','size'))[-1]))
+    width, height = size
+    start, end = (0.72, 0.36) if down else (0.36, 0.72)
+    adb('shell','input','swipe',str(width//2),str(int(height*start)),
+        str(width//2),str(int(height*end)),'400')
+    time.sleep(1)
+
 time.sleep(12)
 tap('مش دلوقتي',optional=True)
 assert any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()), 'Home not ready'
 screenshot('home')
+# On short screens the manual action starts below the fixed tab bar.
+# Bring it into the visible scroll area before tapping its text node.
+scroll_body()
 tap('إضافة مصروف يدويًا')
+screenshot('expense-form-open')
 fields=[n for n in nodes() if n.get('class')=='android.widget.EditText']
 assert len(fields)>=2, 'Expense form missing'
 for field,value in zip(fields,['12.50','QA_coffee']):
@@ -43,6 +55,7 @@ time.sleep(1)
 screenshot('expense-form')
 tap('حفظ')
 time.sleep(3)
+scroll_body(down=False)
 assert any('12.50' in n.get('text','') for n in nodes()), 'Home total did not update'
 screenshot('home-with-expense')
 for label,name in [('الإحصائيات','stats'),('المصاريف','expenses'),('الإدارة','admin')]:

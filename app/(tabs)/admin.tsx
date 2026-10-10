@@ -235,6 +235,7 @@ export default function AdminScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
 
+  const [googleClientId, setGoogleClientId] = useState("");
   const [panel, setPanel] = useState<"all" | "money" | "ai" | "settings" | "backup">("all");
   const [catModal, setCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
@@ -308,6 +309,8 @@ export default function AdminScreen() {
     getAPIKey("openai").then((k) => { if (k) setOpenaiKey(k); }).catch(() => {});
     getAPIKey("gemini").then((k) => { if (k) setGeminiKey(k); }).catch(() => {});
   }, []);
+
+  React.useEffect(() => { setGoogleClientId(settings?.googleClientId ?? ""); }, [settings?.googleClientId]);
 
   React.useEffect(() => {
     if (settings?.monthlyGoal != null) setGoalInput(String(settings.monthlyGoal));
@@ -688,15 +691,15 @@ export default function AdminScreen() {
                 style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text, marginBottom: 10 }]}
                 placeholder="Google OAuth Client ID"
                 placeholderTextColor={colors.textSecondary}
-                value={settings?.googleClientId ?? ""}
-                onChangeText={(v) => updateSetting("googleClientId", v).then(() => queryClient.invalidateQueries({ queryKey: ["settings"] }))}
+                value={googleClientId}
+                onChangeText={setGoogleClientId}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
               <Pressable
                 style={[s.keyBtn, { backgroundColor: colors.primary, marginBottom: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }]}
                 onPress={async () => {
-                  const cid = settings?.googleClientId?.trim();
+                  const cid = googleClientId.trim();
                   if (!cid) { Alert.alert("تنبيه", "أدخل Client ID أولاً"); return; }
                   let ok = false;
                   try { ok = await connectDrive(cid); } catch (error) { Alert.alert("خطأ", error instanceof Error ? error.message : "فشل الربط"); return; }

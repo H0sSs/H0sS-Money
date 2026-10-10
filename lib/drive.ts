@@ -209,18 +209,15 @@ export async function listDriveBackups(): Promise<{ ok: boolean; files?: DriveBa
     if (!token) return { ok: false, error: "غير متصل بـ Google Drive" };
     const folderId = await findOrCreateFolder(token);
     const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-    const list = await fetchWithTimeout(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&pageSize=100&fields=files(id,name,createdTime,size)`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!list.ok) return { ok: false, error: `فشل التحميل: ${list.status}` };
-    const j = await list.json();
-    const files: DriveBackupFile[] = (j.files ?? []).map((f: any) => ({
-      id: f.id,
-      name: f.name,
-      createdTime: f.createdTime,
-      size: f.size ?? null,
-    }));
+    const files: DriveBackupFile[] = [];
+    let pageToken: string | undefined;
+    do {
+      const list = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&pageSize=100&fields=nextPageToken,files(id,name,createdTime,size)${pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : ""}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!list.ok) return { ok: false, error: `فشل التحميل: ${list.status}` };
+      const j = await list.json();
+      files.push(...(j.files ?? []).map((f: any) => ({ id: f.id, name: f.name, createdTime: f.createdTime, size: f.size ?? null })));
+      pageToken = j.nextPageToken;
+    } while (pageToken);
     return { ok: true, files };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "خطأ" };

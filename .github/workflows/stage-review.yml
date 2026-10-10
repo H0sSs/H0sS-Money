@@ -11,9 +11,9 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN: '38060236176'
-      SOURCE_SHA: '23fda0408c0d24d2afd0c650d8660cef69d37b9d'
-      REVIEW_TAG: 'review-1.1.0-23fda04'
+      SOURCE_RUN: '38062845206'
+      SOURCE_SHA: '51e0e65b2ee4611ba8907ca0dd008a9e5bf8e146'
+      REVIEW_TAG: 'review-1.1.0-51e0e65'
     steps:
       - name: Require successful exact-source build and Android tests
         shell: bash
@@ -115,7 +115,7 @@ jobs:
           أدخل Web Client ID في قسم النسخ والبيانات بالتطبيق. النسخ إلى Drive يدوي؛ بيانات المصاريف تبقى محلية.
           
           ## بصمات الملفات
-          '''+'\n'.join(sums)+'\n\nSource: '+os.environ['SOURCE_SHA']+'\nUI verification: https://github.com/H0sSs/H0sS-Money/actions/runs/38060236176\nBuild: https://github.com/H0sSs/H0sS-Money/actions/runs/'+os.environ['SOURCE_RUN']+'\n'
+          '''+'\n'.join(sums)+'\n\nSource: '+os.environ['SOURCE_SHA']+'\nUI verification: https://github.com/H0sSs/H0sS-Money/actions/runs/38062845206\nBuild: https://github.com/H0sSs/H0sS-Money/actions/runs/'+os.environ['SOURCE_RUN']+'\n'
           report='\n'.join(line.strip() for line in report.splitlines())+'\n'
           (dest/'H0sS-Money-1.1.0-Report.md').write_text(report)
           with zipfile.ZipFile(dest/'H0sS-Money-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as archive:
@@ -149,8 +149,8 @@ jobs:
           import json,os
           r=json.load(open('previous-release.json'))
           assert r['id']==409001550 and r['draft'] is True
-          assert r['tag_name'] in ['review-1.1.0-22f122f',os.environ['REVIEW_TAG']]
-          assert r['target_commitish'] in ['22f122f0e68adc33b837ca5058bea9b7a519ebb6',os.environ['SOURCE_SHA']]
+          assert r['tag_name'] in ['review-1.1.0-23fda04',os.environ['REVIEW_TAG']]
+          assert r['target_commitish'] in ['23fda0408c0d24d2afd0c650d8660cef69d37b9d',os.environ['SOURCE_SHA']]
           PY
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/409001550" -f tag_name="$REVIEW_TAG" -f target_commitish="$SOURCE_SHA" -f name="H0sS-Money 1.1.0 — review APKs" -F draft=true -F body=@delivery/H0sS-Money-1.1.0-Report.md > refreshed-release.json
           gh release upload "$REVIEW_TAG" --repo "$GITHUB_REPOSITORY" --clobber delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.1.0-Report.md delivery/H0sS-Money-UI-QA.zip

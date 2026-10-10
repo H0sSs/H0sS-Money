@@ -83,7 +83,8 @@
             "enablePngCrunchInReleaseBuilds": true
           }
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": false,

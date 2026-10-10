@@ -678,10 +678,10 @@ export default function AdminScreen() {
           {!settings?.driveAccessToken ? (
             <>
               <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 8, lineHeight: 18 }}>
-                اربط Google Drive لحفظ نسخة احتياطية يدويًا. يحتاج إعداد OAuth متوافقًا مع تطبيق Android.
+                اربط Google Drive لحفظ نسخة احتياطية يدويًا. أدخل Web Client ID، وأنشئ عميل Android باسم الحزمة وبصمة SHA-1 الموجودة مع ملفات البناء.
               </Text>
               <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 8, fontFamily: "Inter_400Regular" }}>
-                Redirect URI لإضافته في Google Cloud:{"\n"}
+                إعداد Android في Google Cloud:{"\n"}
                 <Text style={{ color: colors.primary, fontFamily: "Inter_500Medium" }}>{getDriveRedirectUri()}</Text>
               </Text>
               <TextInput

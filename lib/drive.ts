@@ -21,7 +21,7 @@ const REDIRECT_URI = AuthSession.makeRedirectUri({
 });
 
 export function getDriveRedirectUri(): string {
-  return REDIRECT_URI;
+  return Platform.OS === "android" ? "com.hossmoney.app — Android OAuth Client + SHA-1" : REDIRECT_URI;
 }
 
 interface TokenBundle {
@@ -47,12 +47,24 @@ async function saveTokens(t: TokenBundle): Promise<void> {
 }
 
 export async function clearDriveAuth(): Promise<void> {
+  if (Platform.OS === "android") { try { const { GoogleSignin } = await import("@react-native-google-signin/google-signin"); await GoogleSignin.signOut(); } catch {} }
+  await updateSetting("driveNativeAuth", "false");
   await SecureStore.deleteItemAsync("drive_access_token");
   await SecureStore.deleteItemAsync("drive_refresh_token");
   await updateSetting("driveTokenExpiresAt", "");
 }
 
 async function refreshIfNeeded(): Promise<string | null> {
+  const settings = await getSettings();
+  if (Platform.OS === "android" && settings.driveNativeAuth && settings.googleClientId) {
+    const { GoogleSignin } = await import("@react-native-google-signin/google-signin");
+    GoogleSignin.configure({ webClientId: settings.googleClientId, scopes: [DRIVE_SCOPE], offlineAccess: false });
+    const result = await GoogleSignin.signInSilently();
+    if (result.type !== "success") return null;
+    const tokens = await GoogleSignin.getTokens();
+    await saveTokens({ accessToken: tokens.accessToken, expiresAt: Date.now() + 3600000 });
+    return tokens.accessToken;
+  }
   const t = await loadTokens();
   if (!t) return null;
   if (Date.now() < t.expiresAt - 60_000) return t.accessToken;
@@ -78,8 +90,25 @@ async function refreshIfNeeded(): Promise<string | null> {
 }
 
 export async function connectDrive(clientId: string): Promise<boolean> {
+  if (!clientId.endsWith(".apps.googleusercontent.com")) throw new Error("أدخل Web Client ID صالحًا من Google Cloud");
   await updateSetting("googleClientId", clientId);
-
+  if (Platform.OS === "android") {
+    const { GoogleSignin, statusCodes } = await import("@react-native-google-signin/google-signin");
+    GoogleSignin.configure({ webClientId: clientId, scopes: [DRIVE_SCOPE], offlineAccess: false });
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const result = await GoogleSignin.signIn();
+      if (result.type !== "success") return false;
+      const tokens = await GoogleSignin.getTokens();
+      await saveTokens({ accessToken: tokens.accessToken, expiresAt: Date.now() + 3600000 });
+      await updateSetting("driveNativeAuth", "true");
+      return true;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === statusCodes.SIGN_IN_CANCELLED) return false;
+      throw new Error("تعذر ربط Google. تأكد من خدمات Google Play، وWeb Client ID، وعميل Android المرتبط باسم الحزمة وبصمة SHA-1 لهذا APK.");
+    }
+  }
   const request = new AuthSession.AuthRequest({
     clientId,
     scopes: [DRIVE_SCOPE],

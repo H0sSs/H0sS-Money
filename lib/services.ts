@@ -42,6 +42,7 @@ export type Settings = {
   driveRefreshToken: string | null;
   driveTokenExpiresAt: string | null;
   driveAutoBackup: boolean;
+  driveNativeAuth: boolean;
   driveLastBackupAt: string | null;
 };
 
@@ -430,6 +431,7 @@ export async function getSettings(): Promise<Settings> {
     driveRefreshToken: Platform.OS === "web" ? null : await SecureStore.getItemAsync("drive_refresh_token"),
     driveTokenExpiresAt: map.driveTokenExpiresAt || null,
     driveAutoBackup: map.driveAutoBackup === "true",
+    driveNativeAuth: map.driveNativeAuth === "true",
     driveLastBackupAt: map.driveLastBackupAt || null,
   };
 }
@@ -442,6 +444,7 @@ const SENSITIVE_SETTING_KEYS = new Set([
   "driveTokenExpiresAt",
   "driveLastBackupAt",
   "driveAutoBackup",
+  "driveNativeAuth",
   "googleClientId",
   "logoUri",
 ]);

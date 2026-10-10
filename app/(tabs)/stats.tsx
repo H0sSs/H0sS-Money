@@ -53,9 +53,8 @@ function LineChart({
   colors: any;
   onPointPress?: (date: string) => void;
 }) {
-  if (!data || data.length === 0) return <EmptyState colors={colors} label="لا توجد بيانات لعرضها" />;
-
   const { width: screenWidth } = useWindowDimensions();
+  if (!data || data.length === 0) return <EmptyState colors={colors} label="لا توجد بيانات لعرضها" />;
   const width = Math.min(600, Math.max(220, screenWidth - 72));
   const height = 180;
   const padL = 36;
@@ -424,7 +423,7 @@ export default function StatsScreen() {
   const shareAsImage = async () => {
     try {
       setExporting("image");
-      const uri = await captureRef(shotRef, { format: "png", quality: 0.95, result: "tmpfile" });
+      const uri = await captureRef(shotRef, { format: "png", quality: 0.95, result: "tmpfile", snapshotContentContainer: true });
       const can = await Sharing.isAvailableAsync();
       if (can) await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "إحصائيات H0sS-Money" });
     } catch (e) {

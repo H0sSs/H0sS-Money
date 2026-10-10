@@ -164,7 +164,12 @@ async function shouldSend(key: string): Promise<boolean> {
  *   2. Category budget reached 100% (and 80%)
  *   3. Today's spending much higher than recent daily average (≥ 2× and ≥ 200)
  */
-export async function checkAndNotify(expense: {
+let notificationQueue: Promise<void> = Promise.resolve();
+export function checkAndNotify(expense: { amount: number; date: string; category_id: number | null }): Promise<void> {
+  notificationQueue = notificationQueue.then(() => checkExpense(expense)).catch(() => {});
+  return notificationQueue;
+}
+async function checkExpense(expense: {
   amount: number;
   date: string;
   category_id: number | null;
@@ -180,7 +185,8 @@ export async function checkAndNotify(expense: {
     );
     const currency = currencyRow?.value ?? "EGP";
 
-    const { start, end } = monthRange(expense.date);
+    const { start, end } = monthRange(localDate());
+    if (expense.date < start || expense.date > localDate()) return;
 
     // 1. Monthly goal
     const goalRow = await db.getFirstAsync<{ value: string }>(
@@ -239,6 +245,7 @@ export async function checkAndNotify(expense: {
       }
     }
 
+    if (expense.date !== localDate()) return;
     // 3. Unusual daily spending: today vs avg of previous 14 days
     const todayRow = await db.getFirstAsync<{ total: number }>(
       "SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date = ?",

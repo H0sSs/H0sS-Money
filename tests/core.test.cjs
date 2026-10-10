@@ -18,6 +18,8 @@ const database = {
 const cache = new Map();
 const secure = new Map();
 const mocks = {
+  'expo-file-system/legacy': {},
+  'react-native': {Platform:{OS:'android'}},
   'expo-sqlite': {openDatabaseAsync:async()=>database},
   'expo-crypto': {randomUUID:crypto.randomUUID, CryptoDigestAlgorithm:{SHA256:'sha256'}, digestStringAsync:async(_,s)=>crypto.createHash('sha256').update(s).digest('hex')},
   'expo-secure-store': {getItemAsync:async k=>secure.get(k)??null,setItemAsync:async(k,v)=>secure.set(k,v)},

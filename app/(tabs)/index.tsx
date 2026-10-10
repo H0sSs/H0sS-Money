@@ -315,6 +315,7 @@ export default function HomeScreen() {
   const queryClient = useQueryClient();
   const { colors } = useTheme();
 
+  const [isPreparing, setIsPreparing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -373,7 +374,8 @@ export default function HomeScreen() {
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseScale.value }], opacity: pulseOpacity.value }));
 
   const startRecording = async () => {
-    if (isParsing || isRecording) return;
+    if (isParsing || isRecording || isPreparing) return;
+    setIsPreparing(true);
     try {
       const status = await AudioModule.requestRecordingPermissionsAsync();
       if (!status.granted) {
@@ -390,7 +392,7 @@ export default function HomeScreen() {
     } catch (err) {
       console.warn("recording start failed", err);
       Alert.alert("خطأ", "فشل بدء التسجيل");
-    }
+    } finally { setIsPreparing(false); }
   };
 
   const stopRecording = async () => {
@@ -449,7 +451,7 @@ export default function HomeScreen() {
 
         <View style={[s.micSection, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 28, marginHorizontal: 16, marginBottom: 20 }]}>
           <Text style={[s.micHint, { color: colors.textSecondary }]}>
-            {isRecording ? "جاري التسجيل... اضغط للإيقاف" : isParsing ? "جاري التحليل..." : "اضغط للتسجيل"}
+            {isRecording ? "جاري التسجيل... اضغط للإيقاف" : isPreparing ? "تجهيز الميكروفون..." : isParsing ? "جاري التحليل..." : "اضغط للتسجيل"}
           </Text>
 
           <View style={s.micWrapper}>
@@ -457,7 +459,7 @@ export default function HomeScreen() {
             <AnimatedPressable
               style={[s.micBtn, micBtnStyle, { backgroundColor: colors.primary }]}
               onPress={isRecording ? stopRecording : startRecording}
-              disabled={isParsing}
+              disabled={isParsing || isPreparing}
             >
               {isParsing ? (
                 <ActivityIndicator color={colors.background} size="large" />

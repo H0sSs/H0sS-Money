@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 import * as SecureStore from "expo-secure-store";
 import * as Crypto from "expo-crypto";
 import { numericInput, validAmount, csvCell } from "./validation";
@@ -400,8 +402,18 @@ export async function getSettings(): Promise<Settings> {
     "SELECT key, value FROM settings"
   );
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  if (!map.logoBase64 && map.logoUri?.startsWith("file:")) {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(map.logoUri, { encoding: FileSystem.EncodingType.Base64 });
+      const mime = /\.png$/i.test(map.logoUri) ? "image/png" : "image/jpeg";
+      map.logoBase64 = `data:${mime};base64,${base64}`;
+      await updateSetting("logoBase64", map.logoBase64);
+      await updateSetting("logoUri", "");
+      map.logoUri = "";
+    } catch { /* Keep legacy logo available on its original device. */ }
+  }
   for (const [oldKey, secureKey] of [["driveAccessToken", "drive_access_token"], ["driveRefreshToken", "drive_refresh_token"]]) {
-    if (map[oldKey]) { if (!(await SecureStore.getItemAsync(secureKey))) await SecureStore.setItemAsync(secureKey, map[oldKey]); await db.runAsync("DELETE FROM settings WHERE key = ?", [oldKey]); }
+    if (Platform.OS !== "web" && map[oldKey]) { if (!(await SecureStore.getItemAsync(secureKey))) await SecureStore.setItemAsync(secureKey, map[oldKey]); await db.runAsync("DELETE FROM settings WHERE key = ?", [oldKey]); }
   }
   return {
     currency: map.currency ?? "EGP",
@@ -414,8 +426,8 @@ export async function getSettings(): Promise<Settings> {
     monthlyGoal: map.monthlyGoal ? parseFloat(map.monthlyGoal) : null,
     notificationsEnabled: map.notificationsEnabled === "true",
     googleClientId: map.googleClientId || null,
-    driveAccessToken: await SecureStore.getItemAsync("drive_access_token"),
-    driveRefreshToken: await SecureStore.getItemAsync("drive_refresh_token"),
+    driveAccessToken: Platform.OS === "web" ? null : await SecureStore.getItemAsync("drive_access_token"),
+    driveRefreshToken: Platform.OS === "web" ? null : await SecureStore.getItemAsync("drive_refresh_token"),
     driveTokenExpiresAt: map.driveTokenExpiresAt || null,
     driveAutoBackup: map.driveAutoBackup === "true",
     driveLastBackupAt: map.driveLastBackupAt || null,
@@ -463,6 +475,11 @@ export async function importBackup(json: string, mode: "merge" | "replace"): Pro
     if (e.uid) uids.add(e.uid);
   }
   const allowed = new Set(["currency", "theme", "fingerprintEnabled", "aiProvider", "speechProvider", "logoBase64", "monthlyGoal", "notificationsEnabled"]);
+  const enums: Record<string, string[]> = { currency: ["EGP", "USD", "SAR"], theme: ["dark", "light"], fingerprintEnabled: ["true", "false"], notificationsEnabled: ["true", "false"], aiProvider: ["gemini", "openai", "zai"], speechProvider: ["gemini", "openai"] };
+  if (Array.isArray(data.settings)) for (const setting of data.settings) {
+    if (!allowed.has(setting.key)) continue;
+    if (typeof setting.value !== "string" || (enums[setting.key] && !enums[setting.key].includes(setting.value)) || (setting.key === "monthlyGoal" && setting.value !== "" && !validAmount(Number(setting.value))) || (setting.key === "logoBase64" && setting.value !== "" && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(setting.value))) throw new Error("إعدادات النسخة الاحتياطية غير صالحة");
+  }
   let cCount = 0, eCount = 0;
   await db.withExclusiveTransactionAsync(async tx => {
     if (mode === "replace") await tx.execAsync("DELETE FROM expenses; DELETE FROM categories; DELETE FROM notification_log; DELETE FROM settings WHERE key NOT LIKE 'drive%' AND key != 'googleClientId';");

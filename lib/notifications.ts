@@ -1,3 +1,4 @@
+import { localDate, parseDate, monthRange } from "./dates";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { db } from "./db";
@@ -104,11 +105,11 @@ async function send(title: string, body: string, key: string) {
         title,
         body,
         data: { key },
-        ...(Platform.OS === "android" ? { channelId: "budget-alerts" } : {}),
       },
-      trigger: null,
+      trigger: Platform.OS === "android" ? { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1, channelId: "budget-alerts" } : null,
     });
-  } catch {}
+  } catch { return; }
+  await db.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [`alertSent:${key}:${localDate()}`, "1"]);
   try {
     await db.runAsync(
       "INSERT INTO notification_log (title, body, key, kind) VALUES (?, ?, ?, ?)",
@@ -145,28 +146,16 @@ export async function clearNotificationLog(): Promise<void> {
 
 // Throttle: don't send the same alert key twice on the same day
 async function shouldSend(key: string): Promise<boolean> {
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDate();
   const settingKey = `alertSent:${key}:${today}`;
   const row = await db.getFirstAsync<{ value: string }>(
     "SELECT value FROM settings WHERE key = ?",
     [settingKey]
   );
   if (row?.value === "1") return false;
-  await db.runAsync(
-    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-    [settingKey, "1"]
-  );
   return true;
 }
 
-function monthRange(date: string): { start: string; end: string } {
-  const d = new Date(date);
-  const y = d.getFullYear();
-  const m = d.getMonth();
-  const start = new Date(y, m, 1).toISOString().split("T")[0];
-  const end = new Date(y, m + 1, 0).toISOString().split("T")[0];
-  return { start, end };
-}
 
 /**
  * Check budgets after a new expense and send local notifications when needed.
@@ -175,7 +164,12 @@ function monthRange(date: string): { start: string; end: string } {
  *   2. Category budget reached 100% (and 80%)
  *   3. Today's spending much higher than recent daily average (≥ 2× and ≥ 200)
  */
-export async function checkAndNotify(expense: {
+let notificationQueue: Promise<void> = Promise.resolve();
+export function checkAndNotify(expense: { amount: number; date: string; category_id: number | null }): Promise<void> {
+  notificationQueue = notificationQueue.then(() => checkExpense(expense)).catch(() => {});
+  return notificationQueue;
+}
+async function checkExpense(expense: {
   amount: number;
   date: string;
   category_id: number | null;
@@ -191,7 +185,8 @@ export async function checkAndNotify(expense: {
     );
     const currency = currencyRow?.value ?? "EGP";
 
-    const { start, end } = monthRange(expense.date);
+    const { start, end } = monthRange(localDate());
+    if (expense.date < start || expense.date > localDate()) return;
 
     // 1. Monthly goal
     const goalRow = await db.getFirstAsync<{ value: string }>(
@@ -250,6 +245,7 @@ export async function checkAndNotify(expense: {
       }
     }
 
+    if (expense.date !== localDate()) return;
     // 3. Unusual daily spending: today vs avg of previous 14 days
     const todayRow = await db.getFirstAsync<{ total: number }>(
       "SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date = ?",
@@ -257,12 +253,12 @@ export async function checkAndNotify(expense: {
     );
     const todayTotal = todayRow?.total ?? 0;
 
-    const since = new Date(expense.date);
+    const since = parseDate(expense.date);
     since.setDate(since.getDate() - 14);
-    const sinceStr = since.toISOString().split("T")[0];
-    const dayBefore = new Date(expense.date);
+    const sinceStr = localDate(since);
+    const dayBefore = parseDate(expense.date);
     dayBefore.setDate(dayBefore.getDate() - 1);
-    const dayBeforeStr = dayBefore.toISOString().split("T")[0];
+    const dayBeforeStr = localDate(dayBefore);
 
     const avgRow = await db.getFirstAsync<{ avg: number; days: number }>(
       `SELECT AVG(daily) as avg, COUNT(*) as days FROM (
@@ -272,7 +268,7 @@ export async function checkAndNotify(expense: {
        )`,
       [sinceStr, dayBeforeStr]
     );
-    const avg = avgRow?.avg ?? 0;
+    const avg = (avgRow?.avg ?? 0) * (avgRow?.days ?? 0) / 14;
     const days = avgRow?.days ?? 0;
     if (days >= 5 && avg > 0 && todayTotal >= avg * 2 && todayTotal >= 200) {
       if (await shouldSend("unusual-day")) {

@@ -1,0 +1,20 @@
+name: اقتراح تحسين
+description: اقتراح لتحسين التطبيق
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: ما المشكلة أو الاحتياج؟
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: التحسين المقترح
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: تفاصيل أو أمثلة إضافية

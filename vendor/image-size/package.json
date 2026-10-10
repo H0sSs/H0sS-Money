@@ -1,0 +1,7 @@
+{
+  "name": "image-size",
+  "version": "2.0.4",
+  "main": "index.js",
+  "private": true,
+  "dependencies": { "image-size-core": "npm:image-size@2.0.4" }
+}

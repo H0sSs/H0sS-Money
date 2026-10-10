@@ -17,7 +17,12 @@ const DEFAULT_CATEGORIES = [
   { name: "أخرى", icon: "more-horizontal", color: "#9CA3AF" },
 ];
 
-export async function initDB() {
+let initializing: Promise<void> | null = null;
+export function initDB() {
+  if (!initializing) initializing = initialize().catch(error => { initializing = null; throw error; });
+  return initializing;
+}
+async function initialize() {
   // openDatabaseAsync avoids the SharedArrayBuffer requirement on web
   db = await SQLite.openDatabaseAsync("hossmoney.db");
 
@@ -60,6 +65,15 @@ export async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_notification_log_created ON notification_log(created_at DESC);
   `);
 
+  const columns = await db.getAllAsync<{ name: string }>("PRAGMA table_info(expenses)");
+  if (!columns.some(c => c.name === "uid")) await db.execAsync("ALTER TABLE expenses ADD COLUMN uid TEXT");
+  await db.execAsync(`
+    UPDATE expenses SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_uid ON expenses(uid);
+    CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
+    CREATE INDEX IF NOT EXISTS idx_expenses_category_date ON expenses(category_id, date);
+    PRAGMA user_version = 2;
+  `);
   const count = await db.getFirstAsync<{ n: number }>(
     "SELECT COUNT(*) as n FROM categories"
   );

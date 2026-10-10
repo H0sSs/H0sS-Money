@@ -1,0 +1,36 @@
+name: الإبلاغ عن خطأ
+description: مشكلة قابلة لإعادة الإنتاج في التطبيق
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "لا ترفق مفاتيح API أو رموز OAuth أو بيانات مالية شخصية."
+  - type: input
+    id: version
+    attributes:
+      label: إصدار التطبيق وإصدار Android وطراز الجهاز
+      placeholder: "1.1.0 / Android 16 / طراز الجهاز"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: خطوات إعادة إنتاج المشكلة
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: السلوك المتوقع
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: السلوك الفعلي
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: صور أو تفاصيل إضافية بعد إخفاء البيانات الشخصية

@@ -1,3 +1,6 @@
+import PageHeader from "@/components/PageHeader";
+import { numericInput, validAmount } from "@/lib/validation";
+import { localDate, parseDate } from "@/lib/dates";
 import React, { useState } from "react";
 import {
   View,
@@ -49,13 +52,13 @@ import { parseVoiceExpense, generateVoiceSummary } from "@/lib/ai";
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function formatArabicDate(dateStr: string) {
-  const d = new Date(dateStr);
+  const d = parseDate(dateStr);
   return d.toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" });
 }
 
 // ─── Today Summary Card ───────────────────────────────────────
 function TodaySummary({ colors }: { colors: any }) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDate();
   const { data: stats } = useQuery({
     queryKey: ["stats", "day", today],
     queryFn: () => getStats("day", today),
@@ -218,8 +221,8 @@ function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCa
   }, [parsed, categories]);
 
   const handleSave = () => {
-    const num = parseFloat(amount);
-    if (!num || isNaN(num) || !description.trim()) {
+    const num = numericInput(amount);
+    if (!validAmount(num) || !description.trim()) {
       Alert.alert("خطأ", "المبلغ والوصف مطلوبان");
       return;
     }
@@ -295,7 +298,7 @@ function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCa
               {saving ? (
                 <ActivityIndicator size="small" color={colors.background} />
               ) : (
-                <Text style={[s.saveBtnText, { color: colors.background }]}>حفظ</Text>
+                <Text style={[s.saveBtnText, { color: colors.buttonText }]}>حفظ</Text>
               )}
             </Pressable>
           </View>
@@ -312,6 +315,7 @@ export default function HomeScreen() {
   const queryClient = useQueryClient();
   const { colors } = useTheme();
 
+  const [isPreparing, setIsPreparing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -325,10 +329,10 @@ export default function HomeScreen() {
 
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: getCategories });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
-  const { data: monthStats } = useQuery({ queryKey: ["stats", "month"], queryFn: () => getStats("month") });
+  const { data: monthStats } = useQuery({ queryKey: ["stats", "calendarMonth"], queryFn: () => getStats("calendarMonth") });
 
-  const today = new Date().toISOString().split("T")[0];
-  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().split("T")[0];
+  const today = localDate();
+  const weekAgo = localDate(new Date(Date.now() - 7 * 864e5));
   const { data: recentExpenses = [] } = useQuery({
     queryKey: ["expenses", "recent"],
     queryFn: () => getExpenses({ startDate: weekAgo }),
@@ -341,6 +345,8 @@ export default function HomeScreen() {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
+      queryClient.invalidateQueries({ queryKey: ["weeklySummary"] });
+      queryClient.invalidateQueries({ queryKey: ["notif-log"] });
       setShowModal(false);
       setParsedData(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -368,6 +374,8 @@ export default function HomeScreen() {
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseScale.value }], opacity: pulseOpacity.value }));
 
   const startRecording = async () => {
+    if (isParsing || isRecording || isPreparing) return;
+    setIsPreparing(true);
     try {
       const status = await AudioModule.requestRecordingPermissionsAsync();
       if (!status.granted) {
@@ -384,24 +392,26 @@ export default function HomeScreen() {
     } catch (err) {
       console.warn("recording start failed", err);
       Alert.alert("خطأ", "فشل بدء التسجيل");
-    }
+    } finally { setIsPreparing(false); }
   };
 
   const stopRecording = async () => {
+    if (isParsing || !isRecording) return;
+    setIsParsing(true);
     try {
       setIsRecording(false);
       stopPulse();
       scale.value = withSpring(1);
       await recorder.stop();
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       const uri = recorder.uri;
       if (!uri) return;
-      setIsParsing(true);
       const ext = uri.split(".").pop()?.toLowerCase() ?? "m4a";
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
       const provider = settings?.aiProvider ?? "gemini";
-      const result = await parseVoiceExpense(base64, ext, provider, categories);
+      const result = await parseVoiceExpense(base64, ext, provider, categories, uri, settings?.speechProvider ?? "gemini");
       const hintId = await getCategoryHint(result.description);
       if (hintId && !result.categoryName) {
         const cat = categories.find((c) => c.id === hintId);
@@ -425,10 +435,7 @@ export default function HomeScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }} showsVerticalScrollIndicator={false}>
-        <View style={s.header}>
-          <Text style={[s.appName, { color: colors.primary }]}>H0sS-Money</Text>
-          <Text style={[s.dateText, { color: colors.textSecondary }]}>{today_label}</Text>
-        </View>
+        <PageHeader title="مصروفك تحت السيطرة" subtitle={today_label} icon="home" logo={settings?.logoBase64 || settings?.logoUri} />
 
         <TodaySummary colors={colors} />
 
@@ -443,9 +450,9 @@ export default function HomeScreen() {
           />
         )}
 
-        <View style={s.micSection}>
+        <View style={[s.micSection, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 28, marginHorizontal: 16, marginBottom: 20 }]}>
           <Text style={[s.micHint, { color: colors.textSecondary }]}>
-            {isRecording ? "جاري التسجيل... اضغط للإيقاف" : isParsing ? "جاري التحليل..." : "اضغط للتسجيل"}
+            {isRecording ? "جاري التسجيل... اضغط للإيقاف" : isPreparing ? "تجهيز الميكروفون..." : isParsing ? "جاري التحليل..." : "اضغط للتسجيل"}
           </Text>
 
           <View style={s.micWrapper}>
@@ -453,7 +460,7 @@ export default function HomeScreen() {
             <AnimatedPressable
               style={[s.micBtn, micBtnStyle, { backgroundColor: colors.primary }]}
               onPress={isRecording ? stopRecording : startRecording}
-              disabled={isParsing}
+              disabled={isParsing || isPreparing}
             >
               {isParsing ? (
                 <ActivityIndicator color={colors.background} size="large" />
@@ -468,6 +475,7 @@ export default function HomeScreen() {
           </Text>
         </View>
 
+        <Pressable onPress={() => { setParsedData({ amount: null, description: "", categoryName: null, note: null, transcript: "" }); setShowModal(true); }} style={{ marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }}><Icon name="plus" size={18} color={colors.primary} /><Text style={{ color: colors.text, fontWeight: "700" }}>إضافة مصروف يدويًا</Text></Pressable>
         <View style={s.sectionHeader}>
           <Text style={[s.sectionTitle, { color: colors.text }]}>آخر المصاريف</Text>
         </View>
@@ -509,7 +517,7 @@ const s = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   appName: { fontSize: 22, fontFamily: "Inter_700Bold" },
   dateText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  summaryCard: { marginHorizontal: 16, marginBottom: 20, borderRadius: 18, borderWidth: 1, padding: 18 },
+  summaryCard: { marginHorizontal: 16, marginBottom: 20, borderRadius: 22, borderWidth: 1, padding: 20 },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   summaryLabel: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 4 },
   summaryAmount: { fontSize: 36, fontFamily: "Inter_700Bold" },
@@ -519,8 +527,8 @@ const s = StyleSheet.create({
   micSection: { alignItems: "center", paddingVertical: 24 },
   micHint: { fontSize: 15, fontFamily: "Inter_500Medium", marginBottom: 24, textAlign: "center" },
   micWrapper: { position: "relative", alignItems: "center", justifyContent: "center", marginBottom: 20 },
-  pulse: { position: "absolute", width: 90, height: 90, borderRadius: 45, opacity: 0 },
-  micBtn: { width: 90, height: 90, borderRadius: 45, alignItems: "center", justifyContent: "center", elevation: 6, shadowColor: "#F0B429", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12 },
+  pulse: { position: "absolute", width: 100, height: 100, borderRadius: 34, opacity: 0 },
+  micBtn: { width: 100, height: 100, borderRadius: 34, alignItems: "center", justifyContent: "center", elevation: 6, shadowColor: "#F0B429", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12 },
   exampleText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 4 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, marginBottom: 10 },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
@@ -546,7 +554,7 @@ const s = StyleSheet.create({
   cancelBtnText: { fontSize: 15, fontFamily: "Inter_500Medium" },
   saveBtn: { flex: 2, borderRadius: 14, padding: 14, alignItems: "center" },
   saveBtnText: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  weeklyCard: { marginHorizontal: 16, marginBottom: 20, borderRadius: 18, borderWidth: 1, padding: 16 },
+  weeklyCard: { marginHorizontal: 16, marginBottom: 20, borderRadius: 22, borderWidth: 1, padding: 20 },
   weeklyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   weeklyTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
   weeklyTotal: { fontSize: 26, fontFamily: "Inter_700Bold" },

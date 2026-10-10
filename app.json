@@ -2,7 +2,7 @@
   "expo": {
     "name": "H0sS-Money",
     "slug": "hoss-money",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hossmoney",
@@ -17,9 +17,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.hossmoney.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "H0sS-Money يحتاج الميكروفون لتسجيل المصاريف بالصوت.",
-        "NSSpeechRecognitionUsageDescription": "H0sS-Money يستخدم تقنية التعرف على الصوت لتحويل كلامك إلى نص.",
-        "NSFaceIDUsageDescription": "H0sS-Money يستخدم Face ID لحماية بياناتك المالية."
+        "NSMicrophoneUsageDescription": "H0sS-Money \u064a\u062d\u062a\u0627\u062c \u0627\u0644\u0645\u064a\u0643\u0631\u0648\u0641\u0648\u0646 \u0644\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u0645\u0635\u0627\u0631\u064a\u0641 \u0628\u0627\u0644\u0635\u0648\u062a.",
+        "NSSpeechRecognitionUsageDescription": "H0sS-Money \u064a\u0633\u062a\u062e\u062f\u0645 \u062a\u0642\u0646\u064a\u0629 \u0627\u0644\u062a\u0639\u0631\u0641 \u0639\u0644\u0649 \u0627\u0644\u0635\u0648\u062a \u0644\u062a\u062d\u0648\u064a\u0644 \u0643\u0644\u0627\u0645\u0643 \u0625\u0644\u0649 \u0646\u0635.",
+        "NSFaceIDUsageDescription": "H0sS-Money \u064a\u0633\u062a\u062e\u062f\u0645 Face ID \u0644\u062d\u0645\u0627\u064a\u0629 \u0628\u064a\u0627\u0646\u0627\u062a\u0643 \u0627\u0644\u0645\u0627\u0644\u064a\u0629."
       }
     },
     "android": {
@@ -28,17 +28,15 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0A0A0A"
       },
-      "edgeToEdgeEnabled": false,
+      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
         "android.permission.VIBRATE",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.SCHEDULE_EXACT_ALARM"
-      ]
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "versionCode": 2
     },
     "plugins": [
       "expo-router",
@@ -48,19 +46,19 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "H0sS-Money يستخدم Face ID لحماية بياناتك المالية."
+          "faceIDPermission": "H0sS-Money \u064a\u0633\u062a\u062e\u062f\u0645 Face ID \u0644\u062d\u0645\u0627\u064a\u0629 \u0628\u064a\u0627\u0646\u0627\u062a\u0643 \u0627\u0644\u0645\u0627\u0644\u064a\u0629."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "H0sS-Money يحتاج للوصول لمكتبة الصور لرفع الشعار."
+          "photosPermission": "H0sS-Money \u064a\u062d\u062a\u0627\u062c \u0644\u0644\u0648\u0635\u0648\u0644 \u0644\u0645\u0643\u062a\u0628\u0629 \u0627\u0644\u0635\u0648\u0631 \u0644\u0631\u0641\u0639 \u0627\u0644\u0634\u0639\u0627\u0631."
         }
       ],
       [
         "expo-audio",
         {
-          "microphonePermission": "H0sS-Money يحتاج الميكروفون لتسجيل المصاريف بالصوت."
+          "microphonePermission": "H0sS-Money \u064a\u062d\u062a\u0627\u062c \u0627\u0644\u0645\u064a\u0643\u0631\u0648\u0641\u0648\u0646 \u0644\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u0645\u0635\u0627\u0631\u064a\u0641 \u0628\u0627\u0644\u0635\u0648\u062a."
         }
       ],
       [
@@ -75,7 +73,18 @@
         {
           "color": "#F0B429"
         }
-      ]
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enablePngCrunchInReleaseBuilds": true
+          }
+        }
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": false,

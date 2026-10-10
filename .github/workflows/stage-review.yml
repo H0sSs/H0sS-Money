@@ -1,156 +1,32 @@
-name: Stage verified APK review
+name: Publish verified 1.1.0 release
 on:
   push:
     branches: [fix/apk-delivery-review]
 permissions:
   contents: write
-  actions: read
 jobs:
-  stage:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN: '38062845206'
-      SOURCE_SHA: '51e0e65b2ee4611ba8907ca0dd008a9e5bf8e146'
-      REVIEW_TAG: 'review-1.1.0-51e0e65'
     steps:
-      - name: Require successful exact-source build and Android tests
+      - name: Verify owned draft and publish unchanged assets
         shell: bash
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > run.json
+          gh api "repos/$GITHUB_REPOSITORY/releases/409001550" > release.json
           python3 - <<'PY'
-          import json,os
-          r=json.load(open('run.json'))
-          assert r['head_sha']==os.environ['SOURCE_SHA']
-          assert r['status']=='completed' and r['conclusion']=='success', r['conclusion']
-          PY
-      - uses: actions/download-artifact@v4
-        with:
-          name: H0sS-Money-release-arm64
-          path: downloads/arm64
-          run-id: ${{ env.SOURCE_RUN }}
-          github-token: ${{ github.token }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: H0sS-Money-release-universal
-          path: downloads/universal
-          run-id: ${{ env.SOURCE_RUN }}
-          github-token: ${{ github.token }}
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: android-smoke-evidence-api-*
-          path: qa
-          run-id: ${{ env.SOURCE_RUN }}
-          github-token: ${{ github.token }}
-      - name: Verify bytes, prepare report and screenshots
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir delivery
-          python3 - <<'PY'
-          import os,hashlib,pathlib,shutil,zipfile
-          root=pathlib.Path('.');dest=root/'delivery';rows=[];sums=[]
-          expected_cert='fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c'
-          for variant in ['arm64','universal']:
-              folder=root/'downloads'/variant
-              apk=folder/f'H0sS-Money-1.1.0-{variant}.apk'
-              digest=hashlib.sha256(apk.read_bytes()).hexdigest()
-              assert digest==(folder/'SHA256SUMS.txt').read_text().split()[0]
-              assert expected_cert in (folder/'signature.txt').read_text()
-              package=(folder/'package.txt').read_text()
-              assert "versionCode='2'" in package and "versionName='1.1.0'" in package
-              assert 'application-debuggable' not in package
-              shutil.copy2(apk,dest/apk.name)
-              size=apk.stat().st_size
-              rows.append(f'| {variant} | {size/1000000:.2f} MB | {100*(1-size/198186744):.2f}% |')
-              sums.append(f'{digest}  {apk.name}')
-          for api in [35,36]:
-              result=root/'qa'/f'android-smoke-evidence-api-{api}'/'result.txt'
-              assert result.is_file() and result.read_text().startswith('PASS:')
-          (dest/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n')
-          report='''# H0sS-Money 1.1.0 — تقرير التسليم
-          
-          تم تحسين واجهات الرئيسية والإحصائيات والمصاريف والإدارة، مع الحفاظ على التسجيل الصوتي والإضافة والتعديل والحذف والفئات والفلاتر والبحث والأهداف والتنبيهات والقفل والشعار والتصدير والنسخ المحلية وGoogle Drive.
-          
-          ضُبطت حواف Android 16 ولون أيقونات شريط الحالة مع الوضعين الفاتح والداكن. أُصلحت التواريخ المحلية والحسابات الشهرية واستيراد النسخ بأمان ومنع التكرار وتخزين الرموز الحساسة وأخطاء الشبكة وحالات التسجيل. أُضيف Z.ai GLM-5 بجانب Gemini وOpenAI، مع اختيار مستقل لمزوّد تحويل الصوت.
-          
-          ## حجم ملفات APK
-          النسخة القديمة: 198.19 MB. القياس هنا لحجم ملف APK، وليس حجم التطبيق المثبت.
-          
-          | النسخة | حجم APK | التخفيض |
-          | --- | --- | --- |
-          '''+'\n'.join(rows)+'''
-          
-          ARM64 للأجهزة التي تدعم arm64-v8a. النسخة الشاملة تحتوي arm64-v8a وarmeabi-v7a وx86 وx86_64. كلاهما يحتفظ بنفس الميزات، ويتطلب Android 7 أو أحدث.
-          
-          ## التحقق المنفذ
-          - TypeScript و6 مجموعات اختبارات تشمل قاعدة SQLite والتواريخ والاستيراد ونتائج AI وأمان CSV/HTML وتوافق تحديثات الاعتماديات.
-          - 18/18 فحص Expo وتجهيز JavaScript/Hermes وبناء نسختي release.
-          - التوقيع وفحص عدم تفعيل debuggable ومطابقة SHA-256.
-          - محاكيا Android 15 وAndroid 16: فتح التطبيق، إضافة 12.50، تحديث الإجمالي، التبويبات الأربعة، ثم إعادة التشغيل والتحقق من بقاء المصروف.
-          - مراجعة بصرية للمعاينة الداكنة والفاتحة، وملف صور المحاكي مرفق.
-          
-          ## حدود التحقق
-          التسجيل الحقيقي والبصمة وربط Google Drive وطلبات مزودي AI بحساباتك تحتاج اختبارًا بموبايلك ومفاتيحك. لم يُختبر اتصال مدفوع فعلي بمزوّد AI بدون مفتاح. لا يُقدّم ضمان بأن أي برنامج خالٍ من جميع الأخطاء.
-          
-          تم إصلاح تنبيهات decode-uri-component وimage-size وPostCSS وUUID. متبقية تنبيهات أدوات البناء braces وnode-forge وsprintf-js، التي لا تتوفر لها إصدارات مصححة متوافقة وقت المراجعة. التفاصيل في docs/DEPENDENCY-REVIEW.md.
-          
-          ## التثبيت والتوقيع
-          اعمل نسخة JSON احتياطية من التطبيق الحالي ثم ثبّت APK كتحديث. package: com.hossmoney.app، versionCode: 2. التوقيع يطابق APK القديم المنشور في الريبو، لكنه شهادة تطوير Expo؛ نشر إنتاجي يحتاج مفتاح توقيع خاص. لا تحذف التطبيق إذا كنت تريد الاحتفاظ ببياناته المحلية.
-          
-          ## تفعيل GLM-5
-          1. سجّل أو ادخل إلى [صفحة API Keys الرسمية](https://z.ai/manage-apikey/apikey-list)، وأنشئ مفتاحًا.
-          2. فعّل رصيد API العادي من [Billing](https://z.ai/manage-apikey/billing) عند الحاجة. التطبيق يستخدم واجهة Model API العادية.
-          3. في التطبيق افتح الإدارة ← الذكاء الاصطناعي ← Z.ai، أدخل المفتاح ثم اضغط حفظ المفتاح واختبار الاتصال، واختر Z.ai لتحليل المصروف.
-          4. للصوت اختر Gemini أو OpenAI وأدخل مفتاحه أيضًا؛ GLM-5 هنا نموذج نصي يحلل النص الناتج من الصوت.
-          أدخل المفاتيح داخل التطبيق، ولا تضعها في الكود أو ترسلها في المحادثة.
-          
-          المرجع: [دليل Z.ai](https://docs.z.ai/guides/overview/quick-start) و[GLM-5](https://docs.z.ai/guides/llm/glm-5).
-          
-          ## Google Drive
-          أنشئ OAuth Web Client ID، ومعه Android OAuth Client للتطبيق com.hossmoney.app وبصمة SHA-1:
-          5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
-          أدخل Web Client ID في قسم النسخ والبيانات بالتطبيق. النسخ إلى Drive يدوي؛ بيانات المصاريف تبقى محلية.
-          
-          ## بصمات الملفات
-          '''+'\n'.join(sums)+'\n\nSource: '+os.environ['SOURCE_SHA']+'\nUI verification: https://github.com/H0sSs/H0sS-Money/actions/runs/38062845206\nBuild: https://github.com/H0sSs/H0sS-Money/actions/runs/'+os.environ['SOURCE_RUN']+'\n'
-          report='\n'.join(line.strip() for line in report.splitlines())+'\n'
-          (dest/'H0sS-Money-1.1.0-Report.md').write_text(report)
-          with zipfile.ZipFile(dest/'H0sS-Money-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as archive:
-              for p in sorted((root/'qa').rglob('*')):
-                  if p.is_file() and p.suffix in ['.png','.xml','.txt'] and p.name!='logcat.txt':
-                      archive.write(p,p.relative_to(root/'qa'))
-          print('\n'.join(rows))
-          PY
-      - name: Emit compact screenshots for visual review
-        shell: bash
-        run: |
-          python3 -m venv /tmp/qa-preview
-          /tmp/qa-preview/bin/pip install --quiet Pillow
-          /tmp/qa-preview/bin/python - <<'PY'
-          import pathlib,io,base64
-          from PIL import Image
-          root=pathlib.Path('qa/android-smoke-evidence-api-36')
-          for name in ['home-with-expense','stats','expenses','admin','settings-light']:
-              p=root/(name+'.png')
-              if not p.is_file():continue
-              im=Image.open(p);im=im.resize((432,round(im.height*432/im.width)))
-              out=io.BytesIO();im.save(out,format='PNG')
-              print('QA_IMAGE_'+name+'='+base64.b64encode(out.getvalue()).decode())
-          PY
-      - name: Refresh owned draft review release
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/releases/409001550" > previous-release.json
-          python3 - <<'PY'
-          import json,os
-          r=json.load(open('previous-release.json'))
+          import json
+          r=json.load(open('release.json'))
           assert r['id']==409001550 and r['draft'] is True
-          assert r['tag_name'] in ['review-1.1.0-23fda04',os.environ['REVIEW_TAG']]
-          assert r['target_commitish'] in ['23fda0408c0d24d2afd0c650d8660cef69d37b9d',os.environ['SOURCE_SHA']]
+          assert r['tag_name']=='review-1.1.0-51e0e65'
+          assert r['target_commitish']=='51e0e65b2ee4611ba8907ca0dd008a9e5bf8e146'
+          expected=[{"name":"H0sS-Money-1.1.0-arm64.apk","size":32272641,"digest":"sha256:f1b3908e8237aa4366cb406a673871a478b10f176e12090eec86168adffbbc5e"},{"name":"H0sS-Money-1.1.0-Report.md","size":5059,"digest":"sha256:1c0214b235a6b525dc128bb20d19f0de20ab1457890a22f393e6f56d0061e2b8"},{"name":"H0sS-Money-1.1.0-universal.apk","size":89380938,"digest":"sha256:4f00480f13cc286584603d503f40cc860f5f5ad8334222fc3cb4a66c264422fa"},{"name":"H0sS-Money-UI-QA.zip","size":2410682,"digest":"sha256:dcb60cc65875a06f096923de40dfac4ce045e1754b960aaa927c6dcd1f921e4d"},{"name":"SHA256SUMS.txt","size":190,"digest":"sha256:5e60b11ae54018eee0c27ec85b5d1867b6fc02c2e128aaed04b584a7a70d216b"}]
+          actual=[{k:a[k] for k in ['name','size','digest']} for a in r['assets']]
+          assert sorted(actual,key=lambda a:a['name'])==sorted(expected,key=lambda a:a['name'])
+          body=r['body'].replace('تقرير التسليم','تقرير الإصدار')
+          body+='\n\nPublished release assets are identical to the verified review APKs.\n'
+          json.dump({'tag_name':'v1.1.0','target_commitish':r['target_commitish'],'name':'H0sS-Money 1.1.0','body':body,'draft':False,'prerelease':False,'make_latest':'true'},open('publish.json','w'))
           PY
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/409001550" -f tag_name="$REVIEW_TAG" -f target_commitish="$SOURCE_SHA" -f name="H0sS-Money 1.1.0 — review APKs" -F draft=true -F body=@delivery/H0sS-Money-1.1.0-Report.md > refreshed-release.json
-          gh release upload "$REVIEW_TAG" --repo "$GITHUB_REPOSITORY" --clobber delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.1.0-Report.md delivery/H0sS-Money-UI-QA.zip
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/409001550" --input publish.json --jq '{url: .html_url, draft: .draft, tag: .tag_name}'

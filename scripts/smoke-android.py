@@ -35,6 +35,7 @@ def scroll_body(down=True):
         str(width//2),str(int(height*end)),'400')
     time.sleep(1)
 
+adb('shell','settings','put','secure','show_ime_with_hard_keyboard','1')
 time.sleep(12)
 tap('مش دلوقتي',optional=True)
 assert any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()), 'Home not ready'
@@ -46,11 +47,19 @@ tap('إضافة مصروف يدويًا')
 screenshot('expense-form-open')
 fields=[n for n in nodes() if n.get('class')=='android.widget.EditText']
 assert len(fields)>=2, 'Expense form missing'
-for field,value in zip(fields,['12.50','QA_coffee']):
+for index,value in enumerate(['12.50','QA_coffee']):
+    # The keyboard moves the modal: resolve fresh bounds for each field.
+    fields=[n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('package')=='com.hossmoney.app']
+    field=fields[index]
     coords=list(map(int,re.findall(r'\d+',field.get('bounds',''))))
     adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
+    time.sleep(1)
     adb('shell','input','text',value)
-adb('shell','input','keyevent','4')
+    time.sleep(0.5)
+    adb('shell','input','keyevent','4')
+    time.sleep(0.5)
+    entered=[n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('package')=='com.hossmoney.app']
+    assert entered[index].get('text')==value, f'Incorrect field input: {entered[index].get("text")}'
 time.sleep(1)
 screenshot('expense-form')
 tap('حفظ')

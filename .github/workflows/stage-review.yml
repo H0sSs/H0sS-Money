@@ -11,9 +11,9 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN: '38057829803'
-      SOURCE_SHA: '22f122f0e68adc33b837ca5058bea9b7a519ebb6'
-      REVIEW_TAG: 'review-1.1.0-22f122f'
+      SOURCE_RUN: '38060236176'
+      SOURCE_SHA: '23fda0408c0d24d2afd0c650d8660cef69d37b9d'
+      REVIEW_TAG: 'review-1.1.0-23fda04'
     steps:
       - name: Require successful exact-source build and Android tests
         shell: bash
@@ -24,13 +24,7 @@ jobs:
           import json,os
           r=json.load(open('run.json'))
           assert r['head_sha']==os.environ['SOURCE_SHA']
-          import subprocess
-          jobs=json.loads(subprocess.check_output(['gh','api',f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['SOURCE_RUN']}/jobs"],text=True))['jobs']
-          for name in ['validate','build (arm64)','build (universal)']:
-              assert any(j['name']==name and j['conclusion']=='success' for j in jobs), name
-          ui=json.loads(subprocess.check_output(['gh','api','repos/H0sSs/H0sS-Money/actions/runs/38059600244'],text=True))
-          assert ui['head_sha']=='170974059e31fabbd131ff933ceca4ecbb87bbcf'
-          assert ui['status']=='completed' and ui['conclusion']=='success', ui['conclusion']
+          assert r['status']=='completed' and r['conclusion']=='success', r['conclusion']
           PY
       - uses: actions/download-artifact@v4
         with:
@@ -46,9 +40,9 @@ jobs:
           github-token: ${{ github.token }}
       - uses: actions/download-artifact@v4
         with:
-          pattern: verified-ui-api-*
+          pattern: android-smoke-evidence-api-*
           path: qa
-          run-id: '38059600244'
+          run-id: ${{ env.SOURCE_RUN }}
           github-token: ${{ github.token }}
       - name: Verify bytes, prepare report and screenshots
         shell: bash
@@ -73,14 +67,14 @@ jobs:
               rows.append(f'| {variant} | {size/1000000:.2f} MB | {100*(1-size/198186744):.2f}% |')
               sums.append(f'{digest}  {apk.name}')
           for api in [35,36]:
-              result=root/'qa'/f'verified-ui-api-{api}'/'result.txt'
+              result=root/'qa'/f'android-smoke-evidence-api-{api}'/'result.txt'
               assert result.is_file() and result.read_text().startswith('PASS:')
           (dest/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n')
           report='''# H0sS-Money 1.1.0 — تقرير التسليم
           
           تم تحسين واجهات الرئيسية والإحصائيات والمصاريف والإدارة، مع الحفاظ على التسجيل الصوتي والإضافة والتعديل والحذف والفئات والفلاتر والبحث والأهداف والتنبيهات والقفل والشعار والتصدير والنسخ المحلية وGoogle Drive.
           
-          أُصلحت التواريخ المحلية والحسابات الشهرية واستيراد النسخ بأمان ومنع التكرار وتخزين الرموز الحساسة وأخطاء الشبكة وحالات التسجيل. أُضيف Z.ai GLM-5 بجانب Gemini وOpenAI، مع اختيار مستقل لمزوّد تحويل الصوت.
+          ضُبطت حواف Android 16 ولون أيقونات شريط الحالة مع الوضعين الفاتح والداكن. أُصلحت التواريخ المحلية والحسابات الشهرية واستيراد النسخ بأمان ومنع التكرار وتخزين الرموز الحساسة وأخطاء الشبكة وحالات التسجيل. أُضيف Z.ai GLM-5 بجانب Gemini وOpenAI، مع اختيار مستقل لمزوّد تحويل الصوت.
           
           ## حجم ملفات APK
           النسخة القديمة: 198.19 MB. القياس هنا لحجم ملف APK، وليس حجم التطبيق المثبت.
@@ -117,11 +111,11 @@ jobs:
           
           ## Google Drive
           أنشئ OAuth Web Client ID، ومعه Android OAuth Client للتطبيق com.hossmoney.app وبصمة SHA-1:
-          5e8f16062ea3cd2c4a0d547876baa6f38cabf625
+          5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
           أدخل Web Client ID في قسم النسخ والبيانات بالتطبيق. النسخ إلى Drive يدوي؛ بيانات المصاريف تبقى محلية.
           
           ## بصمات الملفات
-          '''+'\n'.join(sums)+'\n\nSource: '+os.environ['SOURCE_SHA']+'\nUI verification: https://github.com/H0sSs/H0sS-Money/actions/runs/38059600244\nBuild: https://github.com/H0sSs/H0sS-Money/actions/runs/'+os.environ['SOURCE_RUN']+'\n'
+          '''+'\n'.join(sums)+'\n\nSource: '+os.environ['SOURCE_SHA']+'\nUI verification: https://github.com/H0sSs/H0sS-Money/actions/runs/38060236176\nBuild: https://github.com/H0sSs/H0sS-Money/actions/runs/'+os.environ['SOURCE_RUN']+'\n'
           report='\n'.join(line.strip() for line in report.splitlines())+'\n'
           (dest/'H0sS-Money-1.1.0-Report.md').write_text(report)
           with zipfile.ZipFile(dest/'H0sS-Money-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as archive:
@@ -138,7 +132,7 @@ jobs:
           /tmp/qa-preview/bin/python - <<'PY'
           import pathlib,io,base64
           from PIL import Image
-          root=pathlib.Path('qa/verified-ui-api-36')
+          root=pathlib.Path('qa/android-smoke-evidence-api-36')
           for name in ['home-with-expense','stats','expenses','admin','settings-light']:
               p=root/(name+'.png')
               if not p.is_file():continue
@@ -146,8 +140,17 @@ jobs:
               out=io.BytesIO();im.save(out,format='PNG')
               print('QA_IMAGE_'+name+'='+base64.b64encode(out.getvalue()).decode())
           PY
-      - name: Create draft review release
+      - name: Refresh owned draft review release
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$REVIEW_TAG" --repo "$GITHUB_REPOSITORY" --draft --target "$SOURCE_SHA" --title "H0sS-Money 1.1.0 — review APKs" --notes-file delivery/H0sS-Money-1.1.0-Report.md delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.1.0-Report.md delivery/H0sS-Money-UI-QA.zip
+          gh api "repos/$GITHUB_REPOSITORY/releases/409001550" > previous-release.json
+          python3 - <<'PY'
+          import json,os
+          r=json.load(open('previous-release.json'))
+          assert r['id']==409001550 and r['draft'] is True
+          assert r['tag_name'] in ['review-1.1.0-22f122f',os.environ['REVIEW_TAG']]
+          assert r['target_commitish'] in ['22f122f0e68adc33b837ca5058bea9b7a519ebb6',os.environ['SOURCE_SHA']]
+          PY
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/409001550" -f tag_name="$REVIEW_TAG" -f target_commitish="$SOURCE_SHA" -f name="H0sS-Money 1.1.0 — review APKs" -F draft=true -F body=@delivery/H0sS-Money-1.1.0-Report.md > refreshed-release.json
+          gh release upload "$REVIEW_TAG" --repo "$GITHUB_REPOSITORY" --clobber delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.1.0-Report.md delivery/H0sS-Money-UI-QA.zip

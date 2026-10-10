@@ -4,10 +4,13 @@ import { Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { useTheme } from "@/contexts/ThemeContext";
 import Icon from "@/components/Icon";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabLayout() {
   const { colors, isDark } = useTheme();
   const isIOS = Platform.OS === "ios";
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(12, insets.bottom);
 
   return (
     <Tabs
@@ -16,9 +19,9 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
-          height: 78,
+          height: 66 + bottomPadding,
           paddingTop: 10,
-          paddingBottom: 12,
+          paddingBottom: bottomPadding,
           position: "absolute",
           backgroundColor: isIOS ? "transparent" : colors.surface,
           borderTopWidth: 1,

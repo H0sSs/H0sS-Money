@@ -9,7 +9,7 @@
 - AI result validation and unknown category handling.
 - SQLite migrations, calendar monthly statistics, merge collisions, repeat import, replace rollback, secret filtering.
 - Both release APK builds, signature validation, non-debuggable check, size and SHA-256 evidence.
-- Android 35 emulator cold launch, home screen readiness, process survives, no fatal/JS errors.
+- Android 15/16 (API 35/36) emulator launch, manual expense, four tabs, persistence after restart, no fatal/JS errors, and safe system-bar spacing.
 
 ## Device acceptance (requires user credentials and hardware)
 1. Export an existing backup before installation; check signing compatibility without uninstalling.

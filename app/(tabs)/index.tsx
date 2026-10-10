@@ -396,6 +396,8 @@ export default function HomeScreen() {
   };
 
   const stopRecording = async () => {
+    if (isParsing || !isRecording) return;
+    setIsParsing(true);
     try {
       setIsRecording(false);
       stopPulse();
@@ -404,7 +406,6 @@ export default function HomeScreen() {
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       const uri = recorder.uri;
       if (!uri) return;
-      setIsParsing(true);
       const ext = uri.split(".").pop()?.toLowerCase() ?? "m4a";
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,

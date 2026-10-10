@@ -17,18 +17,18 @@
 <a id="download"></a>
 ## تحميل التطبيق
 
-**إصدار المراجعة 1.1.0** متاح في [مسودة التسليم على GitHub](https://github.com/H0sSs/H0sS-Money/releases/tag/untagged-ab7143c08f85a6dc43c6). المسودة تحتاج تسجيل الدخول بحساب له صلاحية الوصول، وليست إصدارًا عامًا بعد.
+**الإصدار 1.1.0** متاح في [صفحة الإصدار على GitHub](https://github.com/H0sSs/H0sS-Money/releases/tag/v1.1.0). الإصدار منشور للعامة، وملفات APK متاحة للتحميل مباشرة.
 
 | الملف | حجم APK | يناسب | التخفيض عن النسخة السابقة |
 | --- | --- | --- | --- |
-| [ARM64](https://github.com/H0sSs/H0sS-Money/releases/download/untagged-ab7143c08f85a6dc43c6/H0sS-Money-1.1.0-arm64.apk) | **32.27 MB** | أجهزة تدعم arm64-v8a | **83.72%** |
-| [الشاملة](https://github.com/H0sSs/H0sS-Money/releases/download/untagged-ab7143c08f85a6dc43c6/H0sS-Money-1.1.0-universal.apk) | **89.38 MB** | arm64-v8a، armeabi-v7a، x86، x86_64 | **54.90%** |
+| [ARM64](https://github.com/H0sSs/H0sS-Money/releases/download/v1.1.0/H0sS-Money-1.1.0-arm64.apk) | **32.27 MB** | أجهزة تدعم arm64-v8a | **83.72%** |
+| [الشاملة](https://github.com/H0sSs/H0sS-Money/releases/download/v1.1.0/H0sS-Money-1.1.0-universal.apk) | **89.38 MB** | arm64-v8a، armeabi-v7a، x86، x86_64 | **54.90%** |
 
 الحجم السابق **198.19 MB**. الأرقام لحجم ملف APK؛ الحجم بعد التثبيت يختلف. النسختان تقدمان نفس الميزات وتتطلبان Android 7 أو أحدث.
 
 **قبل التحديث:** صدّر نسخة JSON من بياناتك، ثم ثبّت APK فوق التطبيق الحالي. لا تحذف التطبيق للاحتفاظ ببياناته المحلية. التوقيع يطابق نسخة الريبو السابقة، لكنه شهادة تطوير Expo؛ النشر الإنتاجي يحتاج مفتاح توقيع خاص وثابت.
 
-[تقرير التسليم](https://github.com/H0sSs/H0sS-Money/releases/download/untagged-ab7143c08f85a6dc43c6/H0sS-Money-1.1.0-Report.md) · [صور الاختبارات](https://github.com/H0sSs/H0sS-Money/releases/download/untagged-ab7143c08f85a6dc43c6/H0sS-Money-UI-QA.zip) · [SHA-256](https://github.com/H0sSs/H0sS-Money/releases/download/untagged-ab7143c08f85a6dc43c6/SHA256SUMS.txt)
+[تقرير التسليم](https://github.com/H0sSs/H0sS-Money/releases/download/v1.1.0/H0sS-Money-1.1.0-Report.md) · [صور الاختبارات](https://github.com/H0sSs/H0sS-Money/releases/download/v1.1.0/H0sS-Money-UI-QA.zip) · [SHA-256](https://github.com/H0sSs/H0sS-Money/releases/download/v1.1.0/SHA256SUMS.txt)
 
 <a id="features"></a>
 ## ماذا يقدم التطبيق؟
@@ -90,7 +90,7 @@
 
 1. فعّل Drive API في مشروع Google Cloud واضبط شاشة OAuth.
 2. أنشئ **Web OAuth Client ID** و**Android OAuth Client** في نفس المشروع.
-3. استخدم اسم الحزمة `com.hossmoney.app` وبصمة SHA-1 الخاصة بملف APK. بصمة إصدار المراجعة الحالي:
+3. استخدم اسم الحزمة `com.hossmoney.app` وبصمة SHA-1 الخاصة بملف APK. بصمة الإصدار الحالي:
 
 ```text
 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25

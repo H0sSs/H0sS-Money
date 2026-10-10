@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { DarkColors, LightColors, ThemeColors } from "@/lib/theme";
 import { getSettings, updateSetting } from "@/lib/services";
+import { StatusBar } from "expo-status-bar";
 
 type ThemeContextType = {
   colors: ThemeColors;
@@ -30,6 +31,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ colors: isDark ? DarkColors : LightColors, isDark, toggleTheme }}>
+      <StatusBar style={isDark ? "light" : "dark"} />
       {children}
     </ThemeContext.Provider>
   );

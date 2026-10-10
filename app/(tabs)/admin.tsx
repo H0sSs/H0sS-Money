@@ -1,3 +1,9 @@
+import * as LocalAuthentication from "expo-local-authentication";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import PageHeader from "@/components/PageHeader";
+import AISettings from "@/components/AISettings";
+import { numericInput, validAmount } from "@/lib/validation";
+import { localDate, parseDate } from "@/lib/dates";
 import React, { useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput,
@@ -108,10 +114,11 @@ function CategoryModal({ visible, category, colors, saving, onClose, onSave }: C
               <Pressable style={[s.saveBtn, { backgroundColor: colors.primary }]} disabled={saving}
                 onPress={() => {
                   if (!name.trim()) { Alert.alert("خطأ", "الاسم مطلوب"); return; }
-                  onSave({ name: name.trim(), icon, color, budget: budget ? parseFloat(budget) : null });
+                  if (budget && !validAmount(numericInput(budget))) { Alert.alert("خطأ", "الميزانية يجب أن تكون مبلغًا موجبًا"); return; }
+                  onSave({ name: name.trim(), icon, color, budget: budget ? numericInput(budget) : null });
                 }}>
                 {saving ? <ActivityIndicator size="small" color={colors.background} /> :
-                  <Text style={[s.saveText, { color: colors.background }]}>حفظ</Text>}
+                  <Text style={[s.saveText, { color: colors.buttonText }]}>حفظ</Text>}
               </Pressable>
             </View>
           </View>
@@ -135,7 +142,7 @@ function ExpenseModal({ visible, expense, categories, colors, saving, onClose, o
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(localDate());
   const [categoryId, setCategoryId] = useState<number | null>(null);
 
   React.useEffect(() => {
@@ -147,7 +154,7 @@ function ExpenseModal({ visible, expense, categories, colors, saving, onClose, o
       setCategoryId(expense.category_id ?? null);
     } else {
       setAmount(""); setDescription(""); setNote("");
-      setDate(new Date().toISOString().split("T")[0]);
+      setDate(localDate());
       setCategoryId(null);
     }
   }, [expense, visible]);
@@ -197,13 +204,13 @@ function ExpenseModal({ visible, expense, categories, colors, saving, onClose, o
               </Pressable>
               <Pressable style={[s.saveBtn, { backgroundColor: colors.primary }]} disabled={saving}
                 onPress={() => {
-                  const amt = parseFloat(amount);
+                  const amt = numericInput(amount);
                   if (!amount || isNaN(amt) || amt <= 0) { Alert.alert("خطأ", "أدخل مبلغاً صحيحاً"); return; }
                   if (!description.trim()) { Alert.alert("خطأ", "الوصف مطلوب"); return; }
                   onSave({ amount: amt, description: description.trim(), categoryId, date, note: note.trim() || undefined });
                 }}>
                 {saving ? <ActivityIndicator size="small" color={colors.background} /> :
-                  <Text style={[s.saveText, { color: colors.background }]}>حفظ</Text>}
+                  <Text style={[s.saveText, { color: colors.buttonText }]}>حفظ</Text>}
               </Pressable>
             </View>
           </View>
@@ -228,6 +235,7 @@ export default function AdminScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
 
+  const [panel, setPanel] = useState<"all" | "money" | "ai" | "settings" | "backup">("all");
   const [catModal, setCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [expModal, setExpModal] = useState(false);
@@ -246,7 +254,7 @@ export default function AdminScreen() {
 
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: getCategories });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
-  const { data: monthStats } = useQuery({ queryKey: ["stats", "month"], queryFn: () => getStats("month") });
+  const { data: monthStats } = useQuery({ queryKey: ["stats", "calendarMonth"], queryFn: () => getStats("calendarMonth") });
   const { data: recentExpenses = [] } = useQuery({ queryKey: ["expenses", "recent-admin"], queryFn: () => getExpenses({ limit: 5 }) });
   const { data: notifLog = [], refetch: refetchLog } = useQuery<NotificationLogEntry[]>({
     queryKey: ["notif-log"],
@@ -309,7 +317,7 @@ export default function AdminScreen() {
     try {
       setBusyBackup("export");
       const json = await exportBackup();
-      const stamp = new Date().toISOString().split("T")[0];
+      const stamp = localDate();
       const path = FileSystem.cacheDirectory + `hossmoney-backup-${stamp}.json`;
       await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
       const can = await Sharing.isAvailableAsync();
@@ -356,7 +364,7 @@ export default function AdminScreen() {
   };
 
   const handleSaveGoal = async () => {
-    const v = parseFloat(goalInput);
+    const v = numericInput(goalInput);
     if (goalInput && (isNaN(v) || v < 0)) { Alert.alert("خطأ", "أدخل رقماً صحيحاً"); return; }
     await setSetting("monthlyGoal", goalInput && v > 0 ? String(v) : "");
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -365,7 +373,7 @@ export default function AdminScreen() {
   const createCatMutation = useMutation({
     mutationFn: createCategory,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries();
       setCatModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
@@ -375,7 +383,7 @@ export default function AdminScreen() {
   const updateCatMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => updateCategory(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries();
       setCatModal(false);
       setEditingCat(null);
     },
@@ -384,7 +392,8 @@ export default function AdminScreen() {
 
   const deleteCatMutation = useMutation({
     mutationFn: deleteCategory,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["categories"] }),
+    onSuccess: () => queryClient.invalidateQueries(),
+    onError: (error: Error) => Alert.alert("خطأ", error.message),
   });
 
   const createExpMutation = useMutation({
@@ -393,6 +402,8 @@ export default function AdminScreen() {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
+      queryClient.invalidateQueries({ queryKey: ["weeklySummary"] });
+      queryClient.invalidateQueries({ queryKey: ["notif-log"] });
       setExpModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
@@ -405,6 +416,8 @@ export default function AdminScreen() {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
+      queryClient.invalidateQueries({ queryKey: ["weeklySummary"] });
+      queryClient.invalidateQueries({ queryKey: ["notif-log"] });
       setExpModal(false);
       setEditingExp(null);
     },
@@ -417,6 +430,8 @@ export default function AdminScreen() {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
+      queryClient.invalidateQueries({ queryKey: ["weeklySummary"] });
+      queryClient.invalidateQueries({ queryKey: ["notif-log"] });
     },
   });
 
@@ -444,8 +459,10 @@ export default function AdminScreen() {
         base64: true,
       });
       if (!result.canceled && result.assets[0]) {
-        const uri = result.assets[0].uri;
-        await setSetting("logoUri", uri);
+        const asset = await manipulateAsync(result.assets[0].uri, [{ resize: { width: 512 } }], { compress: 0.8, format: SaveFormat.PNG, base64: true });
+        if (!asset.base64) throw new Error("الصورة غير صالحة");
+        await setSetting("logoBase64", `data:${"image/png"};base64,${asset.base64}`);
+        await setSetting("logoUri", "");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch {
@@ -469,15 +486,14 @@ export default function AdminScreen() {
     Haptics.selectionAsync();
   };
   const aiProvider = settings?.aiProvider ?? "openai";
-  const logoUri = settings?.logoUri ?? null;
+  const logoUri = settings?.logoBase64 || settings?.logoUri || null;
 
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }} showsVerticalScrollIndicator={false}>
-        <View style={s.header}>
-          <Text style={[s.title, { color: colors.text }]}>الإدارة</Text>
-        </View>
-
+        <PageHeader title="إدارة محفظتك" subtitle="مصاريفك، تفضيلاتك، ونسخك الاحتياطية في مكان واحد" icon="settings" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 12 }}>{([{ id: "all", title: "الكل" }, { id: "money", title: "المصاريف والفئات" }, { id: "ai", title: "الذكاء الاصطناعي" }, { id: "settings", title: "التفضيلات" }, { id: "backup", title: "النسخ والبيانات" }] as const).map(item => <Pressable key={item.id} onPress={() => setPanel(item.id)} style={{ paddingHorizontal: 15, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: panel === item.id ? colors.primary : colors.border, backgroundColor: panel === item.id ? colors.primary + "18" : colors.surface }}><Text style={{ color: panel === item.id ? colors.primary : colors.textSecondary, fontWeight: "700", fontSize: 12 }}>{item.title}</Text></Pressable>)}</ScrollView>
+        {(panel === "all" || panel === "money") && <>
         {/* Dashboard Totals */}
         <Text style={[s.sec, { color: colors.primary }]}>الإجمالي</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -509,6 +525,8 @@ export default function AdminScreen() {
           )}
         </View>
 
+        </>}
+        {(panel === "all" || panel === "settings") && <>
         {/* Logo */}
         <Text style={[s.sec, { color: colors.primary }]}>شعار التطبيق</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border, alignItems: "center" }]}>
@@ -528,56 +546,19 @@ export default function AdminScreen() {
             </Text>
           </Pressable>
           {logoUri && (
-            <Pressable onPress={() => setSetting("logoUri", "")} style={{ marginTop: 8 }}>
+            <Pressable onPress={async () => { await setSetting("logoBase64", ""); await setSetting("logoUri", ""); }} style={{ marginTop: 8 }}>
               <Text style={{ color: colors.error, fontSize: 12, fontFamily: "Inter_400Regular" }}>إزالة الشعار</Text>
             </Pressable>
           )}
         </View>
 
-        {/* AI */}
+        </>}
+        {(panel === "all" || panel === "ai") && <>
         <Text style={[s.sec, { color: colors.primary }]}>الذكاء الاصطناعي</Text>
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[s.cardLabel, { color: colors.textSecondary }]}>مزود الخدمة</Text>
-          <View style={{ flexDirection: "row", gap: 10, marginTop: 8, marginBottom: 16 }}>
-            {(["openai", "gemini"] as const).map((p) => (
-              <Pressable key={p} onPress={() => setSetting("aiProvider", p)}
-                style={[s.provBtn, { backgroundColor: aiProvider === p ? colors.primary + "20" : colors.surfaceAlt, borderColor: aiProvider === p ? colors.primary : colors.border }]}>
-                <Text style={{ color: aiProvider === p ? colors.primary : colors.textSecondary, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
-                  {p === "openai" ? "OpenAI" : "Gemini"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}><AISettings /></View>
 
-          <Text style={[s.label, { color: colors.textSecondary }]}>OpenAI API Key</Text>
-          <View style={s.keyRow}>
-            <TextInput style={[s.keyInput, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
-              value={openaiKey} onChangeText={setOpenaiKey} placeholder="sk-..." placeholderTextColor={colors.textSecondary}
-              secureTextEntry={!showOKey} autoCorrect={false} autoCapitalize="none" />
-            <Pressable onPress={() => setShowOKey(!showOKey)} style={{ padding: 10 }}>
-              <Icon name={showOKey ? "eye-off" : "eye"} size={18} color={colors.textSecondary} />
-            </Pressable>
-          </View>
-          <Pressable style={[s.keyBtn, { backgroundColor: colors.primary }]} onPress={() => handleSaveKey("openai")} disabled={savingKey === "openai"}>
-            {savingKey === "openai" ? <ActivityIndicator size="small" color={colors.background} /> :
-              <Text style={{ color: colors.background, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>حفظ OpenAI Key</Text>}
-          </Pressable>
-
-          <Text style={[s.label, { color: colors.textSecondary, marginTop: 14 }]}>Gemini API Key</Text>
-          <View style={s.keyRow}>
-            <TextInput style={[s.keyInput, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
-              value={geminiKey} onChangeText={setGeminiKey} placeholder="AIza..." placeholderTextColor={colors.textSecondary}
-              secureTextEntry={!showGKey} autoCorrect={false} autoCapitalize="none" />
-            <Pressable onPress={() => setShowGKey(!showGKey)} style={{ padding: 10 }}>
-              <Icon name={showGKey ? "eye-off" : "eye"} size={18} color={colors.textSecondary} />
-            </Pressable>
-          </View>
-          <Pressable style={[s.keyBtn, { backgroundColor: colors.primary }]} onPress={() => handleSaveKey("gemini")} disabled={savingKey === "gemini"}>
-            {savingKey === "gemini" ? <ActivityIndicator size="small" color={colors.background} /> :
-              <Text style={{ color: colors.background, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>حفظ Gemini Key</Text>}
-          </Pressable>
-        </View>
-
+        </>}
+        {(panel === "all" || panel === "settings") && <>
         {/* Settings */}
         <Text style={[s.sec, { color: colors.primary }]}>إعدادات التطبيق</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -585,7 +566,14 @@ export default function AdminScreen() {
             <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: colors.primary }} thumbColor="#fff" />
           </SettingRow>
           <SettingRow label="قفل بالبصمة" colors={colors}>
-            <Switch value={fingerprint} onValueChange={(v) => setSetting("fingerprintEnabled", v ? "true" : "false")}
+            <Switch value={fingerprint} onValueChange={async (v) => {
+                if (v) {
+                  if (!(await LocalAuthentication.hasHardwareAsync()) || !(await LocalAuthentication.isEnrolledAsync())) { Alert.alert("البصمة غير جاهزة", "أضف بصمة من إعدادات الجهاز أولًا"); return; }
+                  const result = await LocalAuthentication.authenticateAsync({ promptMessage: "تأكيد تفعيل القفل", disableDeviceFallback: false });
+                  if (!result.success) return;
+                }
+                await setSetting("fingerprintEnabled", v ? "true" : "false");
+              }}
               trackColor={{ true: colors.primary }} thumbColor="#fff" />
           </SettingRow>
           <SettingRow label="تنبيهات الميزانية" colors={colors}>
@@ -604,6 +592,8 @@ export default function AdminScreen() {
           </SettingRow>
         </View>
 
+        </>}
+        {(panel === "all" || panel === "money") && <>
         {/* Monthly Savings Goal */}
         <Text style={[s.sec, { color: colors.primary }]}>الهدف الشهري</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -620,7 +610,7 @@ export default function AdminScreen() {
               placeholderTextColor={colors.textSecondary}
             />
             <Pressable style={[s.keyBtn, { backgroundColor: colors.primary, paddingHorizontal: 18, marginBottom: 0 }]} onPress={handleSaveGoal}>
-              <Text style={{ color: colors.background, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>حفظ</Text>
+              <Text style={{ color: colors.buttonText, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>حفظ</Text>
             </Pressable>
           </View>
           {settings?.monthlyGoal != null && (
@@ -630,35 +620,8 @@ export default function AdminScreen() {
           )}
         </View>
 
-        {/* Smart Notifications */}
-        <Text style={[s.sec, { color: colors.primary }]}>التنبيهات الذكية</Text>
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={{ color: colors.text, fontSize: 14, fontFamily: "Inter_600SemiBold" }}>تفعيل التنبيهات</Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, fontFamily: "Inter_400Regular" }}>
-                ينبهك عند 80% من الهدف، تجاوز ميزانية فئة، أو إنفاق غير معتاد
-              </Text>
-            </View>
-            <Switch
-              value={!!settings?.notificationsEnabled}
-              onValueChange={async (v) => {
-                if (v) {
-                  const ok = await requestNotifPerms();
-                  if (!ok) {
-                    Alert.alert("تنبيه", "يجب السماح بالإشعارات من إعدادات النظام");
-                    return;
-                  }
-                }
-                await updateSetting("notificationsEnabled", v ? "true" : "false");
-                queryClient.invalidateQueries({ queryKey: ["settings"] });
-              }}
-              trackColor={{ false: colors.surfaceAlt, true: colors.primary }}
-              thumbColor={colors.background}
-            />
-          </View>
-        </View>
-
+        </>}
+        {(panel === "all" || panel === "settings") && <>
         {/* Notifications Log */}
         <Text style={[s.sec, { color: colors.primary }]}>سجل التنبيهات</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -707,13 +670,15 @@ export default function AdminScreen() {
           )}
         </View>
 
+        </>}
+        {(panel === "all" || panel === "backup") && <>
         {/* Google Drive Backup */}
         <Text style={[s.sec, { color: colors.primary }]}>نسخ Google Drive</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {!settings?.driveAccessToken ? (
             <>
               <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 8, lineHeight: 18 }}>
-                اربط حساب Google Drive لرفع نسخة احتياطية تلقائياً كل يوم. يحتاج Google OAuth Client ID (Web أو Android من Google Cloud Console).
+                اربط Google Drive لحفظ نسخة احتياطية يدويًا. يحتاج إعداد OAuth متوافقًا مع تطبيق Android.
               </Text>
               <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 8, fontFamily: "Inter_400Regular" }}>
                 Redirect URI لإضافته في Google Cloud:{"\n"}
@@ -733,7 +698,8 @@ export default function AdminScreen() {
                 onPress={async () => {
                   const cid = settings?.googleClientId?.trim();
                   if (!cid) { Alert.alert("تنبيه", "أدخل Client ID أولاً"); return; }
-                  const ok = await connectDrive(cid);
+                  let ok = false;
+                  try { ok = await connectDrive(cid); } catch (error) { Alert.alert("خطأ", error instanceof Error ? error.message : "فشل الربط"); return; }
                   if (ok) {
                     Alert.alert("✓", "تم الربط بنجاح");
                     queryClient.invalidateQueries({ queryKey: ["settings"] });
@@ -743,7 +709,7 @@ export default function AdminScreen() {
                 }}
               >
                 <Icon name="link" size={15} color={colors.background} />
-                <Text style={{ color: colors.background, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>ربط Google Drive</Text>
+                <Text style={{ color: colors.buttonText, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>ربط Google Drive</Text>
               </Pressable>
             </>
           ) : (
@@ -769,7 +735,7 @@ export default function AdminScreen() {
                   }}
                 >
                   <Icon name="upload-cloud" size={14} color={colors.background} />
-                  <Text style={{ color: colors.background, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>ارفع الآن</Text>
+                  <Text style={{ color: colors.buttonText, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>ارفع الآن</Text>
                 </Pressable>
                 <Pressable
                   style={[s.keyBtn, { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, flex: 1, marginBottom: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6 }]}
@@ -792,6 +758,8 @@ export default function AdminScreen() {
           )}
         </View>
 
+        </>}
+        {(panel === "all" || panel === "backup") && <>
         {/* Backup & Restore */}
         <Text style={[s.sec, { color: colors.primary }]}>النسخ الاحتياطي</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -809,7 +777,7 @@ export default function AdminScreen() {
               ) : (
                 <>
                   <Icon name="download" size={15} color={colors.background} />
-                  <Text style={{ color: colors.background, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>تصدير نسخة</Text>
+                  <Text style={{ color: colors.buttonText, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>تصدير نسخة</Text>
                 </>
               )}
             </Pressable>
@@ -830,6 +798,8 @@ export default function AdminScreen() {
           </View>
         </View>
 
+        </>}
+        {(panel === "all" || panel === "money") && <>
         {/* Manual Expenses */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 16, marginTop: 8, marginBottom: 8 }}>
           <Text style={[s.sec, { marginHorizontal: 0, marginTop: 0, color: colors.primary }]}>إضافة مصروف يدوياً</Text>
@@ -872,6 +842,8 @@ export default function AdminScreen() {
           )}
         </View>
 
+        </>}
+        {(panel === "all" || panel === "money") && <>
         {/* Categories */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 16, marginTop: 8, marginBottom: 8 }}>
           <Text style={[s.sec, { marginHorizontal: 0, marginTop: 0, color: colors.primary }]}>الفئات ({categories.length})</Text>
@@ -909,6 +881,7 @@ export default function AdminScreen() {
             </View>
           ))}
         </View>
+        </>}
       </ScrollView>
 
       <CategoryModal
@@ -1010,8 +983,8 @@ const s = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
   title: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  sec: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginHorizontal: 16, marginTop: 16, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.8 },
-  card: { marginHorizontal: 16, borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 4 },
+  sec: { fontSize: 15, fontFamily: "Inter_700Bold", textAlign: "right", marginHorizontal: 20, marginTop: 22, marginBottom: 12 },
+  card: { marginHorizontal: 16, borderRadius: 22, borderWidth: 1, padding: 20, marginBottom: 4 },
   cardLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 2 },
   label: { fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 6 },
   keyRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },

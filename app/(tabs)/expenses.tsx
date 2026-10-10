@@ -1,3 +1,6 @@
+import PageHeader from "@/components/PageHeader";
+import { numericInput, validAmount } from "@/lib/validation";
+import { localDate, parseDate } from "@/lib/dates";
 import React, { useState, useEffect } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -16,7 +19,7 @@ import { getExpenses, deleteExpense, updateExpense, getCategories, getSettings, 
 import type { Expense, Category } from "@/lib/services";
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" });
+  return parseDate(dateStr).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" });
 }
 
 function groupByDate(expenses: Expense[]): Record<string, Expense[]> {
@@ -55,8 +58,8 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
   }, [expense]);
 
   const handleSave = () => {
-    const num = parseFloat(amount);
-    if (!num || isNaN(num) || !description.trim()) {
+    const num = numericInput(amount);
+    if (!validAmount(num) || !description.trim()) {
       Alert.alert("خطأ", "المبلغ والوصف مطلوبان");
       return;
     }
@@ -106,7 +109,7 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
               <Text style={[s.cancelText, { color: colors.textSecondary }]}>إلغاء</Text>
             </Pressable>
             <Pressable style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color={colors.background} /> : <Text style={[s.saveText, { color: colors.background }]}>حفظ</Text>}
+              {saving ? <ActivityIndicator size="small" color={colors.background} /> : <Text style={[s.saveText, { color: colors.buttonText }]}>حفظ</Text>}
             </Pressable>
           </View>
         </View>
@@ -150,7 +153,7 @@ export default function ExpensesScreen() {
     if (dateFilter === "today") { cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); }
     else if (dateFilter === "week") { cutoff = new Date(); cutoff.setDate(today.getDate() - 6); }
     else if (dateFilter === "month") { cutoff = new Date(); cutoff.setDate(today.getDate() - 29); }
-    const cutoffStr = cutoff ? cutoff.toISOString().split("T")[0] : null;
+    const cutoffStr = cutoff ? localDate(cutoff) : null;
     const q = search.trim().toLowerCase();
     return allExpenses.filter((e) => {
       if (cutoffStr && e.date < cutoffStr) return false;
@@ -172,6 +175,8 @@ export default function ExpensesScreen() {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
+      queryClient.invalidateQueries({ queryKey: ["weeklySummary"] });
+      queryClient.invalidateQueries({ queryKey: ["notif-log"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
   });
@@ -182,6 +187,8 @@ export default function ExpensesScreen() {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
+      queryClient.invalidateQueries({ queryKey: ["weeklySummary"] });
+      queryClient.invalidateQueries({ queryKey: ["notif-log"] });
       setEditExpense(null);
     },
     onError: (e: any) => Alert.alert("خطأ", e.message),
@@ -220,17 +227,12 @@ export default function ExpensesScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
-      <View style={[s.topBar, { borderBottomColor: colors.border }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={[s.title, { color: colors.text }]}>المصاريف</Text>
-          <Text style={[s.subtitle, { color: colors.textSecondary }]}>{expenses.length} عملية • إجمالي {total.toFixed(2)} {currency}</Text>
-        </View>
+      <PageHeader title="سجل المصاريف" subtitle={`${expenses.length} عملية • ${total.toFixed(2)} ${currency}`} icon="list" actions={<>
         <Pressable onPress={handleExport} disabled={isExporting} style={[s.exportBtn, { backgroundColor: colors.primary + "20", borderColor: colors.primary }]}>
           {isExporting ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="download" size={16} color={colors.primary} />}
           <Text style={[s.exportText, { color: colors.primary }]}>تصدير</Text>
         </Pressable>
-      </View>
-
+      </>} />
       <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
         <View style={[s.searchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Icon name="search" size={16} color={colors.textSecondary} />

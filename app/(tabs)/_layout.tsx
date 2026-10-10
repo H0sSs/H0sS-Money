@@ -16,6 +16,9 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
+          height: 78,
+          paddingTop: 10,
+          paddingBottom: 12,
           position: "absolute",
           backgroundColor: isIOS ? "transparent" : colors.surface,
           borderTopWidth: 1,
@@ -34,7 +37,7 @@ export default function TabLayout() {
           ),
         tabBarLabelStyle: {
           fontFamily: "Inter_500Medium",
-          fontSize: 10,
+          fontSize: 12,
           marginBottom: 2,
         },
       }}

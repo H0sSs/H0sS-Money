@@ -1,3 +1,6 @@
+import { fetchWithTimeout } from "./http";
+import * as SecureStore from "expo-secure-store";
+import { localDate, parseDate } from "./dates";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Platform } from "react-native";
@@ -38,14 +41,14 @@ async function loadTokens(): Promise<TokenBundle | null> {
 }
 
 async function saveTokens(t: TokenBundle): Promise<void> {
-  await updateSetting("driveAccessToken", t.accessToken);
-  if (t.refreshToken) await updateSetting("driveRefreshToken", t.refreshToken);
+  await SecureStore.setItemAsync("drive_access_token", t.accessToken);
+  if (t.refreshToken) await SecureStore.setItemAsync("drive_refresh_token", t.refreshToken);
   await updateSetting("driveTokenExpiresAt", String(t.expiresAt));
 }
 
 export async function clearDriveAuth(): Promise<void> {
-  await updateSetting("driveAccessToken", "");
-  await updateSetting("driveRefreshToken", "");
+  await SecureStore.deleteItemAsync("drive_access_token");
+  await SecureStore.deleteItemAsync("drive_refresh_token");
   await updateSetting("driveTokenExpiresAt", "");
 }
 
@@ -58,7 +61,7 @@ async function refreshIfNeeded(): Promise<string | null> {
   const s = await getSettings();
   if (!s.googleClientId) return null;
 
-  const res = await fetch(DISCOVERY.tokenEndpoint, {
+  const res = await fetchWithTimeout(DISCOVERY.tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: `client_id=${encodeURIComponent(s.googleClientId)}&refresh_token=${encodeURIComponent(t.refreshToken)}&grant_type=refresh_token`,
@@ -89,7 +92,7 @@ export async function connectDrive(clientId: string): Promise<boolean> {
   const result = await request.promptAsync(DISCOVERY);
   if (result.type !== "success" || !result.params.code) return false;
 
-  const tokenRes = await fetch(DISCOVERY.tokenEndpoint, {
+  const tokenRes = await fetchWithTimeout(DISCOVERY.tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -101,7 +104,7 @@ export async function connectDrive(clientId: string): Promise<boolean> {
     }).toString(),
   });
   if (!tokenRes.ok) {
-    console.warn("token exchange failed", await tokenRes.text());
+    throw new Error("فشل ربط Google؛ راجع نوع Client ID وعنوان الرجوع");
     return false;
   }
   const tok = await tokenRes.json();
@@ -117,17 +120,19 @@ const FOLDER_NAME = "H0sS-Money-Backups";
 
 async function findOrCreateFolder(token: string): Promise<string> {
   const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-  const list = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
+  const list = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (!list.ok) throw new Error("تعذر الوصول إلى مجلد النسخ؛ أعد ربط Drive");
   const j = await list.json();
   if (j.files?.[0]?.id) return j.files[0].id;
 
-  const create = await fetch("https://www.googleapis.com/drive/v3/files", {
+  const create = await fetchWithTimeout("https://www.googleapis.com/drive/v3/files", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ name: FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" }),
   });
+  if (!create.ok) throw new Error("تعذر إنشاء مجلد النسخ");
   const cj = await create.json();
   return cj.id;
 }
@@ -139,7 +144,7 @@ export async function uploadBackupToDrive(): Promise<{ ok: boolean; fileName?: s
 
     const folderId = await findOrCreateFolder(token);
     const json = await exportBackup();
-    const stamp = new Date().toISOString().split("T")[0];
+    const stamp = localDate();
     const fileName = `hossmoney-backup-${stamp}.json`;
 
     const boundary = "h0ssmoney" + Math.random().toString(36).slice(2);
@@ -148,7 +153,7 @@ export async function uploadBackupToDrive(): Promise<{ ok: boolean; fileName?: s
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n` +
       `--${boundary}\r\nContent-Type: application/json\r\n\r\n${json}\r\n--${boundary}--`;
 
-    const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+    const res = await fetchWithTimeout("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
       body,
@@ -175,7 +180,7 @@ export async function listDriveBackups(): Promise<{ ok: boolean; files?: DriveBa
     if (!token) return { ok: false, error: "غير متصل بـ Google Drive" };
     const folderId = await findOrCreateFolder(token);
     const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-    const list = await fetch(
+    const list = await fetchWithTimeout(
       `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&pageSize=100&fields=files(id,name,createdTime,size)`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -200,7 +205,7 @@ export async function restoreFromDriveFile(
   try {
     const token = await refreshIfNeeded();
     if (!token) return { ok: false, error: "غير متصل بـ Google Drive" };
-    const dl = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    const dl = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!dl.ok) return { ok: false, error: `فشل التحميل: ${dl.status}` };
@@ -223,7 +228,7 @@ export async function deleteDriveBackup(fileId: string): Promise<{ ok: boolean; 
   try {
     const token = await refreshIfNeeded();
     if (!token) return { ok: false, error: "غير متصل بـ Google Drive" };
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+    const r = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -232,14 +237,4 @@ export async function deleteDriveBackup(fileId: string): Promise<{ ok: boolean; 
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "خطأ" };
   }
-}
-
-export async function maybeAutoBackup(): Promise<void> {
-  try {
-    const s = await getSettings();
-    if (!s.driveAutoBackup || !s.driveAccessToken) return;
-    const last = s.driveLastBackupAt ? Number(s.driveLastBackupAt) : 0;
-    if (Date.now() - last < 24 * 3600 * 1000) return;
-    await uploadBackupToDrive();
-  } catch {}
 }

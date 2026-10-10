@@ -1,13 +1,15 @@
 import { useFonts } from "expo-font";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState } from "react-native";
 import { Alert } from "react-native";
+import { queryClient } from "@/lib/query";
+import { localDate } from "@/lib/dates";
 import { initDB } from "@/lib/db";
 import { getSettings } from "@/lib/services";
 import {
@@ -24,9 +26,6 @@ import Icon from "@/components/Icon";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 5000, retry: 1, gcTime: 300000 } },
-});
 
 function LoadingScreen({ message }: { message: string }) {
   const C = DarkColors;
@@ -108,15 +107,16 @@ export default function RootLayout() {
   const [authNeeded, setAuthNeeded] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
-  const [forceShow, setForceShow] = useState(false);
-
-  // Safety timeout: never block UI more than 5 seconds
-  useEffect(() => {
-    const t = setTimeout(() => setForceShow(true), 5000);
-    return () => clearTimeout(t);
-  }, []);
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [bootAttempt, setBootAttempt] = useState(0);
+  const appState = useRef(AppState.currentState);
+  const backgroundAt = useRef(0);
+  const dayRef = useRef(localDate());
 
   useEffect(() => {
+    setBootError(null);
+    setDbReady(false);
+    setAuthChecked(false);
     initDB()
       .then(async () => {
         setDbReady(true);
@@ -132,19 +132,39 @@ export default function RootLayout() {
               return;
             }
           }
-        } catch {}
+        } catch (error) { throw error; }
         setAuthChecked(true);
       })
-      .catch(() => { setDbReady(true); setAuthChecked(true); });
+      .catch(() => { setBootError("تعذر تجهيز البيانات. بياناتك لم تُحذف؛ حاول مرة أخرى."); SplashScreen.hideAsync().catch(() => {}); });
+  }, [bootAttempt]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", next => {
+      const previous = appState.current;
+      appState.current = next;
+      focusManager.setFocused(next === "active");
+      if (next === "background") backgroundAt.current = Date.now();
+      if (next === "active" && previous !== "active") {
+        if (backgroundAt.current && Date.now() - backgroundAt.current >= 15000) {
+          getSettings().then(async settings => {
+            if (settings.fingerprintEnabled && await LocalAuthentication.isEnrolledAsync()) { setAuthNeeded(true); setAuthenticated(false); }
+          }).catch(() => {});
+        }
+        backgroundAt.current = 0;
+        queryClient.invalidateQueries();
+      }
+    });
+    const timer = setInterval(() => { const today = localDate(); if (dayRef.current !== today) { dayRef.current = today; queryClient.invalidateQueries(); } }, 30000);
+    return () => { subscription.remove(); clearInterval(timer); };
   }, []);
 
   const ready = (fontsLoaded || fontError) && dbReady && authChecked;
 
   useEffect(() => {
-    if (ready || forceShow) {
+    if (ready) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [ready, forceShow]);
+  }, [ready]);
 
   // Ask for notification permission once on first launch (after DB ready & unlocked)
   const canPromptNotifs = ready && (!authNeeded || authenticated);
@@ -172,7 +192,9 @@ export default function RootLayout() {
     })();
   }, [canPromptNotifs]);
 
-  if (!ready && !forceShow) {
+  if (bootError) return <SafeAreaProvider><View style={[lock.container, { backgroundColor: DarkColors.background }]}><Text style={{ color: DarkColors.text, textAlign: "center", padding: 24 }}>{bootError}</Text><Pressable style={[lock.btn, { backgroundColor: DarkColors.primary }]} onPress={() => setBootAttempt(value => value + 1)}><Text>إعادة المحاولة</Text></Pressable></View></SafeAreaProvider>;
+
+  if (!ready) {
     return (
       <SafeAreaProvider>
         <LoadingScreen message={!dbReady ? "تحضير قاعدة البيانات..." : !fontsLoaded ? "تحميل الخطوط..." : "لحظة..."} />
@@ -191,15 +213,15 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <ThemeProvider>
-          <QueryClientProvider client={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               </Stack>
             </GestureHandlerRootView>
-          </QueryClientProvider>
-        </ThemeProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

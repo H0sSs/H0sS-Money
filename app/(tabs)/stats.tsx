@@ -1,5 +1,8 @@
+import PageHeader from "@/components/PageHeader";
+import { escapeHtml } from "@/lib/validation";
+import { localDate, parseDate } from "@/lib/dates";
 import React, { useState, useMemo, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Modal, Alert, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, useWindowDimensions, Modal, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import Svg, {
@@ -52,7 +55,8 @@ function LineChart({
 }) {
   if (!data || data.length === 0) return <EmptyState colors={colors} label="لا توجد بيانات لعرضها" />;
 
-  const width = CHART_W;
+  const { width: screenWidth } = useWindowDimensions();
+  const width = Math.min(600, Math.max(220, screenWidth - 72));
   const height = 180;
   const padL = 36;
   const padR = 12;
@@ -310,7 +314,8 @@ function CompareBars({
   previous: { month: string; total: number };
   colors: any;
 }) {
-  const width = CHART_W;
+  const { width: screenWidth } = useWindowDimensions();
+  const width = Math.min(600, Math.max(220, screenWidth - 72));
   const height = 160;
   const padB = 36;
   const padT = 18;
@@ -380,7 +385,7 @@ export default function StatsScreen() {
   const [exporting, setExporting] = useState<"image" | "pdf" | null>(null);
   const shotRef = useRef<View>(null);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDate();
   const { data: stats, isLoading } = useQuery({
     queryKey: ["stats", period, today],
     queryFn: () => getStats(period, today),
@@ -398,11 +403,11 @@ export default function StatsScreen() {
     const days = period === "week" ? 7 : 30;
     const map = new Map(stats.byDay.map((d) => [d.date, d.total]));
     const out: { date: string; total: number }[] = [];
-    const end = new Date(today);
+    const end = parseDate(today);
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(end.getDate() - i);
-      const k = d.toISOString().split("T")[0];
+      const k = localDate(d);
       out.push({ date: k, total: map.get(k) ?? 0 });
     }
     return out;
@@ -436,7 +441,7 @@ export default function StatsScreen() {
       const cnt = stats?.count ?? 0;
       const periodLabel = period === "week" ? "آخر 7 أيام" : "آخر 30 يوم";
       const catRows = (stats?.byCategory ?? [])
-        .map((c) => `<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c.color};margin-left:8px"></span>${c.name}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:left">${c.total.toFixed(2)} ${currency}</td></tr>`)
+        .map((c) => `<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${/^#[0-9a-f]{6}$/i.test(c.color) ? c.color : "#9CA3AF"};margin-left:8px"></span>${escapeHtml(c.name)}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:left">${c.total.toFixed(2)} ${escapeHtml(currency)}</td></tr>`)
         .join("");
       const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>H0sS-Money</title>
         <style>
@@ -447,9 +452,9 @@ export default function StatsScreen() {
           .compare{display:flex;gap:24px} .compare>div{flex:1}
         </style></head><body>
         <h1>H0sS-Money</h1><div class="sub">تقرير الإحصائيات — ${periodLabel} — ${new Date().toLocaleDateString("ar-EG")}</div>
-        <div class="card"><div style="color:#666;font-size:12px">إجمالي الإنفاق</div><div class="big">${total} ${currency}</div><div style="color:#666;font-size:13px;margin-top:6px">${cnt} عملية · بمتوسط يومي ${(Number(stats?.total ?? 0) / (period === "week" ? 7 : 30)).toFixed(2)} ${currency}</div></div>
+        <div class="card"><div style="color:#666;font-size:12px">إجمالي الإنفاق</div><div class="big">${total} ${escapeHtml(currency)}</div><div style="color:#666;font-size:13px;margin-top:6px">${cnt} عملية · بمتوسط يومي ${(Number(stats?.total ?? 0) / (period === "week" ? 7 : 30)).toFixed(2)} ${escapeHtml(currency)}</div></div>
         <div class="card"><h3 style="margin-top:0">توزيع الفئات</h3><table>${catRows || '<tr><td style="padding:8px;color:#999">لا توجد بيانات</td></tr>'}</table></div>
-        ${compare ? `<div class="card"><h3 style="margin-top:0">مقارنة شهرية</h3><div class="compare"><div><div style="color:#666;font-size:12px">${compare.previous.month}</div><div style="font-size:22px;font-weight:600">${compare.previous.total.toFixed(2)} ${currency}</div></div><div><div style="color:#666;font-size:12px">${compare.current.month}</div><div style="font-size:22px;font-weight:600;color:#F0B429">${compare.current.total.toFixed(2)} ${currency}</div></div></div><div style="margin-top:12px;padding:12px;background:${diffPositive ? "#fef2f2" : "#f0fdf4"};border-radius:10px;color:${diffPositive ? "#b91c1c" : "#15803d"};font-weight:600">${diffPositive ? "زاد" : "قل"} الإنفاق بـ ${Math.abs(compare.diff).toFixed(2)} ${currency} (${compare.diffPct >= 0 ? "+" : ""}${compare.diffPct.toFixed(1)}%)</div></div>` : ""}
+        ${compare ? `<div class="card"><h3 style="margin-top:0">مقارنة شهرية</h3><div class="compare"><div><div style="color:#666;font-size:12px">${compare.previous.month}</div><div style="font-size:22px;font-weight:600">${compare.previous.total.toFixed(2)} ${escapeHtml(currency)}</div></div><div><div style="color:#666;font-size:12px">${compare.current.month}</div><div style="font-size:22px;font-weight:600;color:#F0B429">${compare.current.total.toFixed(2)} ${escapeHtml(currency)}</div></div></div><div style="margin-top:12px;padding:12px;background:${diffPositive ? "#fef2f2" : "#f0fdf4"};border-radius:10px;color:${diffPositive ? "#b91c1c" : "#15803d"};font-weight:600">${diffPositive ? "زاد" : "قل"} الإنفاق بـ ${Math.abs(compare.diff).toFixed(2)} ${escapeHtml(currency)} (${compare.diffPct >= 0 ? "+" : ""}${compare.diffPct.toFixed(1)}%)</div></div>` : ""}
         </body></html>`;
       const { uri } = await Print.printToFileAsync({ html });
       const can = await Sharing.isAvailableAsync();
@@ -464,11 +469,7 @@ export default function StatsScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
       <ScrollView ref={shotRef as any} contentContainerStyle={{ paddingBottom: tabBarHeight + 20, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
-        <View style={[s.header, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
-          <View>
-            <Text style={[s.title, { color: colors.text }]}>الإحصائيات</Text>
-            <Text style={[s.subtitle, { color: colors.textSecondary }]}>نظرة احترافية على إنفاقك</Text>
-          </View>
+        <PageHeader title="صورة أوضح لإنفاقك" subtitle="تتبّع الاتجاهات واستكشف تفاصيل كل يوم وفئة" icon="bar-chart-2" actions={<>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Pressable onPress={shareAsImage} disabled={!!exporting} style={[s.shareBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {exporting === "image" ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="image" size={16} color={colors.primary} />}
@@ -477,8 +478,7 @@ export default function StatsScreen() {
               {exporting === "pdf" ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="file-text" size={16} color={colors.primary} />}
             </Pressable>
           </View>
-        </View>
-
+        </>} />
         <View style={[s.periodBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {PERIODS.map((p) => (
             <Pressable
@@ -599,9 +599,9 @@ export default function StatsScreen() {
               <Pressable
                 onPress={() => {
                   if (!drillDate) return;
-                  const d = new Date(drillDate);
+                  const d = parseDate(drillDate);
                   d.setDate(d.getDate() - 1);
-                  setDrillDate(d.toISOString().split("T")[0]);
+                  setDrillDate(localDate(d));
                 }}
                 hitSlop={10}
                 style={{ padding: 6, borderRadius: 8, backgroundColor: colors.background }}
@@ -609,15 +609,15 @@ export default function StatsScreen() {
                 <Icon name="chevron-right" size={20} color={colors.primary} />
               </Pressable>
               <Text style={{ color: colors.text, fontSize: 15, fontFamily: "Inter_700Bold", flex: 1, textAlign: "center" }}>
-                {drillDate ? new Date(drillDate).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" }) : ""}
+                {drillDate ? parseDate(drillDate).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" }) : ""}
               </Text>
               <Pressable
                 onPress={() => {
                   if (!drillDate) return;
-                  const d = new Date(drillDate);
+                  const d = parseDate(drillDate);
                   d.setDate(d.getDate() + 1);
-                  const next = d.toISOString().split("T")[0];
-                  const today = new Date().toISOString().split("T")[0];
+                  const next = localDate(d);
+                  const today = localDate();
                   if (next > today) return;
                   setDrillDate(next);
                 }}
@@ -702,7 +702,7 @@ const s = StyleSheet.create({
   periodBar: { flexDirection: "row", marginHorizontal: 16, marginBottom: 16, borderRadius: 14, padding: 4, borderWidth: 1, gap: 4 },
   periodBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center" },
   periodText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  card: { marginHorizontal: 16, marginBottom: 14, borderRadius: 18, borderWidth: 1, padding: 18 },
+  card: { marginHorizontal: 16, marginBottom: 14, borderRadius: 22, borderWidth: 1, padding: 20 },
   cardLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 4 },
   bigAmount: { fontSize: 32, fontFamily: "Inter_700Bold" },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold" },

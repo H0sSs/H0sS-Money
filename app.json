@@ -2,7 +2,7 @@
   "expo": {
     "name": "H0sS-Money",
     "slug": "hoss-money",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hossmoney",
@@ -34,11 +34,9 @@
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
         "android.permission.VIBRATE",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.SCHEDULE_EXACT_ALARM"
-      ]
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "versionCode": 2
     },
     "plugins": [
       "expo-router",
@@ -74,6 +72,16 @@
         "expo-notifications",
         {
           "color": "#F0B429"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enablePngCrunchInReleaseBuilds": true
+          }
         }
       ]
     ],

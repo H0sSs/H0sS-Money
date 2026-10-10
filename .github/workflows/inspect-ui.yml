@@ -1,0 +1,45 @@
+name: Inspect Android UI test evidence
+on:
+  push:
+    branches: [fix/apk-ui-diagnostics]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-smoke-evidence
+          path: qa
+          run-id: 38056768143
+          github-token: ${{ github.token }}
+      - name: Inspect form nodes and runtime errors
+        run: |
+          python3 - <<'PY'
+          import pathlib,xml.etree.ElementTree as E
+          for p in sorted(pathlib.Path('qa').glob('*.xml')):
+              print('XML_FILE',p.name)
+              for n in E.parse(p).iter('node'):
+                  if n.get('class')=='android.widget.EditText' or n.get('text') in ['حفظ','خطأ','المبلغ والوصف مطلوبان']:
+                      print(n.attrib)
+          for p in pathlib.Path('qa').glob('*.txt'):
+              for line in p.read_text(errors='replace').splitlines():
+                  if any(s in line for s in ['ReactNativeJS','FATAL EXCEPTION','SQLite','hossmoney']):
+                      print(line[:1000])
+          PY
+      - name: Emit form previews
+        run: |
+          python3 -m venv /tmp/preview
+          /tmp/preview/bin/pip install --quiet Pillow
+          /tmp/preview/bin/python - <<'PY'
+          import io,base64,pathlib
+          from PIL import Image
+          for name in ['expense-form-open','expense-form']:
+              p=pathlib.Path('qa')/(name+'.png')
+              im=Image.open(p);im=im.resize((432,round(im.height*432/im.width)))
+              out=io.BytesIO();im.save(out,format='PNG')
+              print('QA_IMAGE_'+name+'='+base64.b64encode(out.getvalue()).decode())
+          PY

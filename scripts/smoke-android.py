@@ -10,16 +10,46 @@ def nodes():
     return ET.fromstring(adb('shell', 'cat', '/sdcard/window.xml')).iter('node')
 
 def tap(label, optional=False):
-    for node in nodes():
+    visible_nodes=list(nodes())
+    height=int(re.findall(r'\d+x(\d+)', adb('shell','wm','size'))[-1])
+    safe_bottom=int(height*.93)
+    for n in visible_nodes:
+        if n.get('content-desc','').startswith('الرئيسية'):
+            b=list(map(int,re.findall(r'\d+',n.get('bounds',''))))
+            if len(b)==4 and b[1]>height*.7:safe_bottom=min(safe_bottom,b[1])
+    if label in ['الرئيسية','الإحصائيات','المصاريف','الإعدادات']:safe_bottom=int(height*.93)
+    for node in visible_nodes:
         values=[node.get('text',''),node.get('content-desc','')]
         if any(value==label or value.startswith(label+',') for value in values):
             coords=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
-            if len(coords)==4:
+            if len(coords)==4 and coords[2]>coords[0] and coords[3]>coords[1] and (coords[1]+coords[3])//2<safe_bottom:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
                 time.sleep(2)
                 return True
     if optional:return False
     raise RuntimeError(f'UI control not found: {label}')
+
+def tap_scroll(label):
+    for _ in range(5):
+        if tap(label,optional=True):return
+        scroll_body()
+    raise RuntimeError(f'Control not reachable after scrolling: {label}')
+
+def fill_field(label,value):
+    for attempt in range(10):
+        target=next((n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label),None)
+        if target is not None:
+            coords=list(map(int,re.findall(r'\d+',target.get('bounds',''))))
+            height=int(re.findall(r'\d+x(\d+)',adb('shell','wm','size'))[-1])
+            if len(coords)==4 and coords[3]>coords[1] and height*.08<(coords[1]+coords[3])//2<height*.9:
+                adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
+                time.sleep(1);adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
+                entered=next(n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label)
+                assert entered.get('text')==value,f'Incorrect input: {label}'
+                return
+            scroll_body(down=not(len(coords)==4 and coords[3]<height*.2))
+        else:scroll_body(down=attempt<5)
+    raise RuntimeError(f'Input not found: {label}')
 
 def screenshot(name):
     adb('shell','screencap','-p',f'/sdcard/{name}.png')
@@ -31,13 +61,19 @@ def scroll_body(down=True):
     size = list(map(int, re.findall(r'(\d+)x(\d+)', adb('shell','wm','size'))[-1]))
     width, height = size
     start, end = (0.72, 0.36) if down else (0.36, 0.72)
-    adb('shell','input','swipe',str(width//2),str(int(height*start)),
-        str(width//2),str(int(height*end)),'400')
+    adb('shell','input','swipe',str(int(width*.04)),str(int(height*start)),
+        str(int(width*.04)),str(int(height*end)),'400')
     time.sleep(1)
 
 adb('shell','settings','put','secure','show_ime_with_hard_keyboard','1')
 time.sleep(12)
-tap('مش دلوقتي',optional=True)
+screenshot('startup')
+for _ in range(8):
+    tap('مش دلوقتي',optional=True)
+    tap('ابدأ الاستخدام',optional=True)
+    tap('تخطي',optional=True)
+    if any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()):break
+    time.sleep(2)
 assert any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()), 'Home not ready'
 screenshot('home')
 # On short screens the manual action starts below the fixed tab bar.
@@ -62,18 +98,52 @@ for index,value in enumerate(['12.50','QA_coffee']):
     assert entered[index].get('text')==value, f'Incorrect field input: {entered[index].get("text")}'
 time.sleep(1)
 screenshot('expense-form')
-tap('حفظ')
+tap_scroll('حفظ')
 time.sleep(3)
 scroll_body(down=False)
 assert any('12.50' in n.get('text','') for n in nodes()), 'Home total did not update'
 screenshot('home-with-expense')
-for label,name in [('الإحصائيات','stats'),('المصاريف','expenses'),('الإدارة','admin')]:
+# Exercise the same multi-item review and atomic save used by microphone results.
+tap_scroll('إضافة مصروف يدويًا')
+fill_field('مبلغ الصنف 1','19.75')
+fill_field('وصف الصنف 1','QA_bread')
+tap_scroll('إضافة صنف آخر')
+fill_field('مبلغ الصنف 2','7.25')
+fill_field('وصف الصنف 2','QA_bus')
+screenshot('batch-review')
+tap_scroll('حفظ')
+time.sleep(3)
+scroll_body(down=False)
+for _ in range(4):
+    if any('39.50' in n.get('text','') for n in nodes()):break
+    scroll_body(down=False)
+assert any('39.50' in n.get('text','') for n in nodes()), 'Batch total missing an item'
+screenshot('home-with-batch')
+for label,name in [('الإحصائيات','stats'),('المصاريف','expenses'),('الإعدادات','admin')]:
     tap(label)
     screenshot(name)
-tap('التفضيلات')
+    if name=='stats':
+        scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison'); scroll_body(); screenshot('stats-comparison-full'); assert any('لا يوجد إنفاق سابق لحساب النسبة' in n.get('text','') for n in nodes()), 'Zero baseline comparison fabricated a percentage'
+for label,name in [('الحسابات والأرصدة','accounts'),('الدخل','income'),('الديون والسداد','debts'),('المصاريف المتكررة','recurring')]:
+    tap(label)
+    screenshot(name)
+    if name=='income':
+        tap('إضافة دخل')
+        fill_field('الوصف','QA_salary')
+        fill_field('المبلغ','100')
+        tap_scroll('حفظ')
+        assert any('QA_salary' in n.get('text','') for n in nodes()),'Income not saved'
+        screenshot('income-saved')
+    tap('رجوع')
+tap_scroll('المظهر والأمان')
 screenshot('settings')
 # First switch in preferences is the theme toggle.
 switches=[n for n in nodes() if n.get('class')=='android.widget.Switch']
+for _ in range(4):
+    if switches:break
+    scroll_body()
+    switches=[n for n in nodes() if n.get('class')=='android.widget.Switch']
+assert switches, 'Theme switch not reached'
 if switches:
     coords=list(map(int,re.findall(r'\d+',switches[0].get('bounds',''))))
     adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
@@ -82,6 +152,6 @@ if switches:
 adb('shell','am','force-stop','com.hossmoney.app')
 adb('shell','am','start','-W','-n','com.hossmoney.app/.MainActivity')
 time.sleep(8)
-assert any('12.50' in n.get('text','') for n in nodes()), 'Expense did not survive restart'
+assert any('39.50' in n.get('text','') for n in nodes()), 'Batch expenses did not survive restart'
 screenshot('restart-persistence')
-Path('smoke/result.txt').write_text('PASS: cold launch, manual expense, refreshed total, four tabs, restart persistence.\n')
+Path('smoke/result.txt').write_text('PASS: cold launch, single and multi-item expenses plus income, refreshed batch total, four tabs and financial pages, dark/light switch, restart persistence.\n')

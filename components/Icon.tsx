@@ -15,7 +15,10 @@ type IconName =
   | "camera" | "image" | "coffee" | "truck" | "shopping-bag" | "film"
   | "file-text" | "heart" | "wind" | "book" | "more-horizontal"
   | "home" | "zap" | "music" | "globe" | "gift" | "tag" | "tool"
-  | "users" | "activity" | "star" | "box" | "alert-circle";
+  | "users" | "activity" | "star" | "box" | "alert-circle"
+  | "arrow-left" | "chevron-left" | "credit-card" | "trending-up" | "repeat"
+  | "cpu" | "database" | "shield" | "calendar" | "copy" | "search"
+  | "link" | "log-out" | "download-cloud" | "upload-cloud";
 
 interface IconProps {
   name: IconName | string;
@@ -326,11 +329,30 @@ const ICONS: Record<string, (color: string, sw: number) => React.ReactNode> = {
   ),
 };
 
+const PATH_ICONS: Record<string, string> = {
+  'arrow-left': 'M19 12H5m7-7-7 7 7 7',
+  'chevron-left': 'm15 18-6-6 6-6',
+  'credit-card': 'M3 3h18v18H3zM3 9h18M7 15h3',
+  'trending-down': 'm3 7 6 6 4-4 8 10M15 19h6v-6',
+  'trending-up': 'm3 17 6-6 4 4 8-10M15 5h6v6',
+  repeat: 'm17 2 4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4m14-1v3a2 2 0 0 1-2 2H3',
+  cpu: 'M6 6h12v12H6zM9 9h6v6H9zM9 1v5m6-5v5M9 18v5m6-5v5M1 9h5m-5 6h5m12-6h5m-5 6h5',
+  database: 'M20 6c0 2-3.6 4-8 4S4 8 4 6s3.6-4 8-4 8 2 8 4ZM4 6v12c0 2 3.6 4 8 4s8-2 8-4V6M4 12c0 2 3.6 4 8 4s8-2 8-4',
+  shield: 'M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z',
+  calendar: 'M3 5h18v16H3zM3 10h18M8 3v4m8-4v4',
+  copy: 'M9 9h12v12H9zM5 15H3V3h12v2',
+  search: 'M21 21l-6-6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',
+  link: 'M10 13a5 5 0 0 0 7 .5l4-4a5 5 0 0 0-7-7l-2 2m2 6a5 5 0 0 0-7-.5l-4 4a5 5 0 0 0 7 7l2-2',
+  'log-out': 'M9 21H3V3h6m7 14 5-5-5-5m5 5H9',
+  'download-cloud': 'm8 15 4 4 4-4m-4 4V9M5 17a5 5 0 0 1-1-10 7 7 0 0 1 13-2 5 5 0 0 1 3 9',
+  'upload-cloud': 'm8 13 4-4 4 4m-4-4v10M5 17a5 5 0 0 1-1-10 7 7 0 0 1 13-2 5 5 0 0 1 3 9',
+};
+
 export default function Icon({ name, size = 24, color = "#000", strokeWidth = 2 }: IconProps) {
   const renderer = ICONS[name];
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      {renderer ? renderer(color, strokeWidth) : (
+      {renderer ? renderer(color, strokeWidth) : PATH_ICONS[name] ? <Path d={PATH_ICONS[name]} stroke={color} strokeWidth={strokeWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" /> : (
         <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={strokeWidth} fill="none" />
       )}
     </Svg>

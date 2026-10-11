@@ -6,18 +6,19 @@
 - Android JS/Hermes export.
 - Local Cairo dates including DST, leap February, year transition.
 - Arabic number validation, CSV quoting/formula safety, HTML escaping.
-- AI result validation and unknown category handling.
+- 14 core test groups, AI array/legacy validation, unknown category handling, atomic batch rollback, zero-baseline percentage handling.
+- Six mocked speech/analysis combinations retain three separate items, amounts, categories and the transcript.
 - SQLite migrations, calendar monthly statistics, merge collisions, repeat import, replace rollback, secret filtering.
 - Both release APK builds, signature validation, non-debuggable check, size and SHA-256 evidence.
-- Android 15/16 (API 35/36) emulator launch, manual expense, four tabs, persistence after restart, no fatal/JS errors, and safe system-bar spacing.
+- Android 15/16 (API 35/36) emulator launch, manual expense plus two-item batch, income and finance/settings pages, four tabs, persistence after restart, no fatal/JS errors, and safe system-bar spacing.
 
 ## Device acceptance (requires user credentials and hardware)
 1. Export an existing backup before installation; check signing compatibility without uninstalling.
 2. Add/edit/delete Arabic expenses and dates; confirm all summaries refresh and category deletion unassigns expenses.
 3. Compare calendar month target and notification totals; verify rolling 30-day chart stays independent.
-4. Import v1 and v2, merge twice, test invalid JSON, restore after restart; check logo and theme.
+4. Import v1, v2 and v3, merge twice, test invalid JSON, restore after restart; check logo and theme.
 5. For each provider, test key success/failure and quota handling. For Z.ai, test both Gemini and OpenAI speech combinations.
-6. Record on physical Android, confirm amount/category/note editing; disable network during analysis and retry.
+6. Record on physical Android, record several items with separate prices/categories, confirm all items and amount/category/note editing; verify unknown prices need completion; disable network during analysis and retry.
 7. Enable fingerprint, cold launch, cancel/retry, background over 15s, return, and disable/re-enable.
 8. Google consent, token renewal, backup/list/restore/delete/logout; ensure each failure is actionable.
 9. Enable/disable notifications and verify 80/100% alerts once per day.

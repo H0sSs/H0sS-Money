@@ -141,7 +141,7 @@ function WeeklySummaryCard({ colors }: { colors: any }) {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Icon name={trendIcon} size={13} color={trendColor} />
           <Text style={{ color: trendColor, fontSize: 12, fontFamily: "ArabicBold" }}>
-            {summary.diffPct > 0 ? "+" : ""}{summary.diffPct.toFixed(0)}%
+            {summary.diffPct == null ? "بداية المقارنة" : `${summary.diffPct > 0 ? "+" : ""}${summary.diffPct.toFixed(0)}%`}
           </Text>
         </View>
       </View>

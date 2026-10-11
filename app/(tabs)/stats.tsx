@@ -323,10 +323,10 @@ function CompareBars({
       <Rect x={cxCur} y={padT + innerH - curH} width={barW} height={curH} rx={10} fill="url(#curBar)" />
 
       <SvgText x={cxPrev + barW / 2} y={padT + innerH - prevH - 6} fontSize={11} fill={colors.text} textAnchor="middle" fontFamily="ArabicBold">
-        {previous.total >= 1000 ? `${(previous.total / 1000).toFixed(1)}k` : Math.round(previous.total)}
+        {previous.total >= 1000 ? `${(previous.total / 1000).toFixed(1)}k` : previous.total.toFixed(2)}
       </SvgText>
       <SvgText x={cxCur + barW / 2} y={padT + innerH - curH - 6} fontSize={11} fill={colors.primary} textAnchor="middle" fontFamily="ArabicBold">
-        {current.total >= 1000 ? `${(current.total / 1000).toFixed(1)}k` : Math.round(current.total)}
+        {current.total >= 1000 ? `${(current.total / 1000).toFixed(1)}k` : current.total.toFixed(2)}
       </SvgText>
 
     </Svg><View style={{ flexDirection: "row", justifyContent: "center", gap: 36 }}>{[previous,current].map((m,i)=><View key={m.month} style={{ width: barW, alignItems: "center" }}><Text style={{ color: colors.text, fontFamily: "ArabicBold", fontSize: 12 }}>{monthName(m.month)}</Text><Text style={{ color: colors.textSecondary, fontFamily: "ArabicRegular", fontSize: 10 }}>{i===0?"الشهر السابق":"الشهر الحالي"}</Text></View>)}</View></View>
@@ -379,7 +379,8 @@ export default function StatsScreen() {
     return out;
   }, [stats, period, today, range.start,range.end]);
 
-  const diffPositive = (compare?.diff ?? 0) >= 0;
+  const diffPositive = (compare?.diff ?? 0) > 0;
+  const diffPctLabel = compare?.diffPct == null ? "لا يوجد إنفاق سابق لحساب النسبة" : `(${compare.diffPct >= 0 ? "+" : ""}${compare.diffPct.toFixed(1)}%)`;
 
   const { data: drillExpenses = [] } = useQuery({
     queryKey: ["expenses", "drill", drillDate],
@@ -420,7 +421,7 @@ export default function StatsScreen() {
         <h1>H0sS-Money</h1><div class="sub">تقرير الإحصائيات — ${periodLabel} — ${new Date().toLocaleDateString("ar-EG")}</div>
         <div class="card"><div style="color:#666;font-size:12px">إجمالي الإنفاق</div><div class="big">${total} ${escapeHtml(currency)}</div><div style="color:#666;font-size:13px;margin-top:6px">${cnt} عملية · بمتوسط يومي ${(Number(stats?.total ?? 0) / dayCount).toFixed(2)} ${escapeHtml(currency)}</div></div>
         <div class="card"><h3 style="margin-top:0">توزيع الفئات</h3><table>${catRows || '<tr><td style="padding:8px;color:#999">لا توجد بيانات</td></tr>'}</table></div>
-        ${compare ? `<div class="card"><h3 style="margin-top:0">مقارنة شهرية</h3><div class="compare"><div><div style="color:#666;font-size:12px">${compare.previous.month}</div><div style="font-size:22px;font-weight:600">${compare.previous.total.toFixed(2)} ${escapeHtml(currency)}</div></div><div><div style="color:#666;font-size:12px">${compare.current.month}</div><div style="font-size:22px;font-weight:600;color:#F0B429">${compare.current.total.toFixed(2)} ${escapeHtml(currency)}</div></div></div><div style="margin-top:12px;padding:12px;background:${diffPositive ? "#fef2f2" : "#f0fdf4"};border-radius:10px;color:${diffPositive ? "#b91c1c" : "#15803d"};font-weight:600">${diffPositive ? "زاد" : "قل"} الإنفاق بـ ${Math.abs(compare.diff).toFixed(2)} ${escapeHtml(currency)} (${compare.diffPct >= 0 ? "+" : ""}${compare.diffPct.toFixed(1)}%)</div></div>` : ""}
+        ${compare ? `<div class="card"><h3 style="margin-top:0">مقارنة شهرية</h3><div class="compare"><div><div style="color:#666;font-size:12px">${compare.previous.month}</div><div style="font-size:22px;font-weight:600">${compare.previous.total.toFixed(2)} ${escapeHtml(currency)}</div></div><div><div style="color:#666;font-size:12px">${compare.current.month}</div><div style="font-size:22px;font-weight:600;color:#F0B429">${compare.current.total.toFixed(2)} ${escapeHtml(currency)}</div></div></div><div style="margin-top:12px;padding:12px;background:${diffPositive ? "#fef2f2" : "#f0fdf4"};border-radius:10px;color:${diffPositive ? "#b91c1c" : "#15803d"};font-weight:600">${compare.diff === 0 ? "لم يتغير" : diffPositive ? "زاد" : "قل"} الإنفاق بـ ${Math.abs(compare.diff).toFixed(2)} ${escapeHtml(currency)} ${escapeHtml(diffPctLabel)}</div></div>` : ""}
         </body></html>`;
       const { uri } = await Print.printToFileAsync({ html });
       const can = await Sharing.isAvailableAsync();
@@ -527,7 +528,7 @@ export default function StatsScreen() {
                     color={diffPositive ? "#EF4444" : "#10B981"}
                   />
                   <Text style={{ color: colors.text, fontSize: 13, fontFamily: "ArabicBold" }}>
-                    {diffPositive ? "زاد إنفاقك" : "قل إنفاقك"} عن الشهر الماضي بـ
+                    {compare.diff === 0 ? "لم يتغير إنفاقك عن الشهر الماضي" : `${diffPositive ? "زاد إنفاقك" : "قل إنفاقك"} عن الشهر الماضي بـ`}
                   </Text>
                 </View>
                 <Text
@@ -540,8 +541,7 @@ export default function StatsScreen() {
                 >
                   {Math.abs(compare.diff).toFixed(2)} {currency}{" "}
                   <Text style={{ fontSize: 12, fontFamily: "ArabicRegular", color: colors.textSecondary }}>
-                    ({compare.diffPct >= 0 ? "+" : ""}
-                    {compare.diffPct.toFixed(1)}%)
+                    {diffPctLabel}
                   </Text>
                 </Text>
               </View>

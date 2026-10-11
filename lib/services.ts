@@ -299,11 +299,16 @@ export async function getStats(
   };
 }
 
+export function expenseChangePercent(current: number, previous: number): number | null {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || current < 0 || previous < 0) throw new Error("قيم المقارنة غير صالحة");
+  return previous > 0 ? ((current - previous) / previous) * 100 : current > 0 ? null : 0;
+}
+
 export type MonthCompareResult = {
   current: { month: string; total: number; count: number };
   previous: { month: string; total: number; count: number };
   diff: number;
-  diffPct: number;
+  diffPct: number | null;
 };
 
 export async function getMonthComparison(referenceDate?: string): Promise<MonthCompareResult> {
@@ -326,7 +331,7 @@ export async function getMonthComparison(referenceDate?: string): Promise<MonthC
   const curTotal = cur?.total ?? 0;
   const prevTotal = prev?.total ?? 0;
   const diff = curTotal - prevTotal;
-  const diffPct = prevTotal > 0 ? (diff / prevTotal) * 100 : curTotal > 0 ? 100 : 0;
+  const diffPct = expenseChangePercent(curTotal, prevTotal);
   return {
     current: { month: monthLabel(curStart), total: curTotal, count: cur?.count ?? 0 },
     previous: { month: monthLabel(prevStart), total: prevTotal, count: prev?.count ?? 0 },
@@ -343,7 +348,7 @@ export type WeeklySummary = {
   count: number;
   prevTotal: number;
   diff: number;
-  diffPct: number;
+  diffPct: number | null;
   topCategory: { name: string; color: string; total: number; pct: number } | null;
   topDay: { date: string; total: number } | null;
   busiestDayLabel: string;
@@ -387,7 +392,7 @@ export async function getWeeklySummary(referenceDate?: string): Promise<WeeklySu
   const total = cur?.total ?? 0;
   const prevTotal = prev?.total ?? 0;
   const diff = total - prevTotal;
-  const diffPct = prevTotal > 0 ? (diff / prevTotal) * 100 : total > 0 ? 100 : 0;
+  const diffPct = expenseChangePercent(total, prevTotal);
   const busiestDayLabel = topDay
     ? new Date(topDay.date).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" })
     : "—";

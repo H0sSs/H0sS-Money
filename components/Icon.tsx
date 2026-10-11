@@ -333,6 +333,7 @@ const PATH_ICONS: Record<string, string> = {
   'arrow-left': 'M19 12H5m7-7-7 7 7 7',
   'chevron-left': 'm15 18-6-6 6-6',
   'credit-card': 'M3 3h18v18H3zM3 9h18M7 15h3',
+  'trending-down': 'm3 7 6 6 4-4 8 10M15 19h6v-6',
   'trending-up': 'm3 17 6-6 4 4 8-10M15 5h6v6',
   repeat: 'm17 2 4 4-4 4M3 11V8a2 2 0 0 1 2-2h16M7 22l-4-4 4-4m14-1v3a2 2 0 0 1-2 2H3',
   cpu: 'M6 6h12v12H6zM9 9h6v6H9zM9 1v5m6-5v5M9 18v5m6-5v5M1 9h5m-5 6h5m12-6h5m-5 6h5',

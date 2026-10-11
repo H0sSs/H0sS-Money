@@ -61,15 +61,19 @@ def scroll_body(down=True):
     size = list(map(int, re.findall(r'(\d+)x(\d+)', adb('shell','wm','size'))[-1]))
     width, height = size
     start, end = (0.72, 0.36) if down else (0.36, 0.72)
-    adb('shell','input','swipe',str(width//2),str(int(height*start)),
-        str(width//2),str(int(height*end)),'400')
+    adb('shell','input','swipe',str(int(width*.04)),str(int(height*start)),
+        str(int(width*.04)),str(int(height*end)),'400')
     time.sleep(1)
 
 adb('shell','settings','put','secure','show_ime_with_hard_keyboard','1')
 time.sleep(12)
-tap('تخطي',optional=True)
-tap('مش دلوقتي',optional=True)
-tap('تخطي',optional=True)
+screenshot('startup')
+for _ in range(8):
+    tap('مش دلوقتي',optional=True)
+    tap('ابدأ الاستخدام',optional=True)
+    tap('تخطي',optional=True)
+    if any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()):break
+    time.sleep(2)
 assert any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()), 'Home not ready'
 screenshot('home')
 # On short screens the manual action starts below the fixed tab bar.
@@ -119,7 +123,7 @@ for label,name in [('الإحصائيات','stats'),('المصاريف','expense
     tap(label)
     screenshot(name)
     if name=='stats':
-        scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison'); scroll_body(); screenshot('stats-comparison-full')
+        scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison'); scroll_body(); screenshot('stats-comparison-full'); assert any('لا يوجد إنفاق سابق لحساب النسبة' in n.get('text','') for n in nodes()), 'Zero baseline comparison fabricated a percentage'
 for label,name in [('الحسابات والأرصدة','accounts'),('الدخل','income'),('الديون والسداد','debts'),('المصاريف المتكررة','recurring')]:
     tap(label)
     screenshot(name)

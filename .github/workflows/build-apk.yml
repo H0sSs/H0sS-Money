@@ -1,7 +1,7 @@
 name: Validate and build release APK
 on:
   push:
-    branches: [main, master, fix/release-redesign, feat/1.2-complete]
+    branches: [main, master, fix/release-redesign]
     paths-ignore: ['docs/**', 'scripts/**', '.github/workflows/**']
   pull_request:
   workflow_dispatch:

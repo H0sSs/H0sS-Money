@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getAccounts } from '@/lib/finance';
 import { localDate, parseDate } from '@/lib/dates';
 import { numericInput, validAmount } from '@/lib/validation';
@@ -12,6 +13,7 @@ type Draft = { amount: string; description: string; note: string; categoryId: nu
 type Props = { visible: boolean; parsed: ParsedExpense[] | null; categories: Category[]; saving: boolean; colors: any; onCancel: () => void; onSave: (items: ExpenseInput[]) => void };
 
 export default function ExpenseReview({ visible, parsed, categories, saving, colors: c, onCancel, onSave }: Props) {
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState<Draft[]>([]);
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: getAccounts });
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function ExpenseReview({ visible, parsed, categories, saving, col
   }
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={() => { if (!saving) onCancel(); }}>
     <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000080' }}>
-      <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: '90%' }} contentContainerStyle={{ padding: 20, backgroundColor: c.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: '90%' }} contentContainerStyle={{ padding: 20, paddingBottom: 20 + insets.bottom, backgroundColor: c.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
         <Text style={{ ...text, fontFamily: 'ArabicBold', fontSize: 22, marginBottom: 12 }}>مراجعة المصاريف — {items.length} صنف</Text>
         {!!parsed?.[0]?.transcript && <View style={{ padding: 12, borderRadius: 12, backgroundColor: c.surfaceAlt, marginBottom: 16 }}>
           <Text style={{ ...label, fontFamily: 'ArabicBold' }}>النص المسموع</Text><Text style={text}>{parsed[0].transcript}</Text>

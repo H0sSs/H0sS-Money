@@ -15,7 +15,10 @@ type IconName =
   | "camera" | "image" | "coffee" | "truck" | "shopping-bag" | "film"
   | "file-text" | "heart" | "wind" | "book" | "more-horizontal"
   | "home" | "zap" | "music" | "globe" | "gift" | "tag" | "tool"
-  | "users" | "activity" | "star" | "box" | "alert-circle";
+  | "users" | "activity" | "star" | "box" | "alert-circle"
+  | "arrow-left" | "chevron-left" | "credit-card" | "trending-up" | "repeat"
+  | "cpu" | "database" | "shield" | "calendar" | "copy" | "search"
+  | "link" | "log-out" | "download-cloud" | "upload-cloud";
 
 interface IconProps {
   name: IconName | string;

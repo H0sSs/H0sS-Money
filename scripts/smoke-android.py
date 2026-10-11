@@ -17,6 +17,7 @@ def tap(label, optional=False):
         if n.get('content-desc','').startswith('الرئيسية'):
             b=list(map(int,re.findall(r'\d+',n.get('bounds',''))))
             if len(b)==4 and b[1]>height*.7:safe_bottom=min(safe_bottom,b[1])
+    if label in ['الرئيسية','الإحصائيات','المصاريف','الإعدادات']:safe_bottom=int(height*.93)
     for node in visible_nodes:
         values=[node.get('text',''),node.get('content-desc','')]
         if any(value==label or value.startswith(label+',') for value in values):

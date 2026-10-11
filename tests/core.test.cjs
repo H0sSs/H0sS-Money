@@ -159,3 +159,7 @@ test('batch expense save commits all categories and prices or rolls back the ent
  await assert.rejects(()=>services.createExpenses([{amount:10,description:'valid'},{amount:0,description:'missing price'}]));assert.equal((await services.getExpenses()).length,before+2);
  await assert.rejects(()=>services.createExpenses([]));
 });
+
+test('spending changes never invent a percentage from a zero baseline',()=>{
+ assert.equal(services.expenseChangePercent(39.5,0),null);assert.equal(services.expenseChangePercent(0,0),0);assert.equal(services.expenseChangePercent(0,50),-100);assert.equal(services.expenseChangePercent(150,100),50);assert.throws(()=>services.expenseChangePercent(-1,0));
+});

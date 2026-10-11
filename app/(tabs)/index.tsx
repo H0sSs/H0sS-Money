@@ -1,17 +1,13 @@
 import { useRouter } from "expo-router";
-import { getAccounts } from "@/lib/finance";
 import PageHeader from "@/components/PageHeader";
-import { numericInput, validAmount } from "@/lib/validation";
 import { localDate, parseDate } from "@/lib/dates";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   ScrollView,
-  Modal,
-  TextInput,
   ActivityIndicator,
   Alert,
   Platform,
@@ -43,13 +39,15 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   getExpenses,
   getStats,
-  createExpense,
+  createExpenses,
   getCategories,
   getSettings,
   getCategoryHint,
   getWeeklySummary,
 } from "@/lib/services";
-import { parseVoiceExpense, generateVoiceSummary } from "@/lib/ai";
+import ExpenseReview from "@/components/ExpenseReview";
+import type { ExpenseInput } from "@/lib/services";
+import { parseVoiceExpense, generateVoiceSummary, type ParsedExpense } from "@/lib/ai";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -185,142 +183,6 @@ function WeeklySummaryCard({ colors }: { colors: any }) {
   );
 }
 
-// ─── Confirm Expense Modal ────────────────────────────────────
-interface ParsedData {
-  amount: number | null;
-  description: string;
-  categoryName: string | null;
-  note: string | null;
-  transcript: string;
-}
-
-interface ConfirmModalProps {
-  visible: boolean;
-  parsed: ParsedData | null;
-  categories: Array<{ id: number; name: string; icon: string; color: string }>;
-  saving: boolean;
-  colors: any;
-  onCancel: () => void;
-  onSave: (data: { amount: number; description: string; categoryId: number | null; note: string | null; date: string; accountId: number }) => void;
-}
-
-function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCancel, onSave }: ConfirmModalProps) {
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [note, setNote] = useState("");
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
-  const [date,setDate]=useState(localDate());
-  const [account,setAccount]=useState(0);
-  const {data:accounts=[]}=useQuery({queryKey:['accounts'],queryFn:getAccounts});
-
-  React.useEffect(() => {
-    if (parsed) {
-      setAmount(parsed.amount != null ? String(parsed.amount) : "");
-      setDescription(parsed.description ?? "");
-      setNote(parsed.note ?? "");
-      setDate(localDate());
-      setAccount(0);
-      const matched = categories.find(
-        (c) => parsed.categoryName && c.name.toLowerCase().includes(parsed.categoryName.toLowerCase())
-      );
-      setSelectedCategoryId(matched?.id ?? null);
-    }
-  }, [parsed, categories]);
-
-  const handleSave = () => {
-    const num = numericInput(amount);
-    if (!validAmount(num) || !description.trim()) {
-      Alert.alert("خطأ", "المبلغ والوصف مطلوبان");
-      return;
-    }
-    try{parseDate(date);}catch(e){Alert.alert("التاريخ غير صالح",e instanceof Error?e.message:"");return;}
-    const accountId=account||accounts[0]?.id;if(!accountId){Alert.alert("حساب مفقود","أضف حسابًا أولًا");return;}
-    onSave({ amount: num, description: description.trim(), categoryId: selectedCategoryId, note: note.trim() || null, date,accountId });
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <View style={s.modalOverlay}>
-        <ScrollView keyboardShouldPersistTaps="handled" style={{maxHeight:"90%"}} contentContainerStyle={[s.modalSheet, { backgroundColor: colors.surface }]}>
-          <View style={[s.modalHandle, { backgroundColor: colors.border }]} />
-          <Text style={[s.modalTitle, { color: colors.text }]}>تأكيد المصروف</Text>
-
-          {!!parsed?.transcript && (
-            <View style={[s.transcriptBox, { backgroundColor: colors.primary + "15", borderColor: colors.primary + "40" }]}>
-              <Icon name="mic" size={14} color={colors.primary} />
-              <Text style={[s.transcriptText, { color: colors.textSecondary }]} numberOfLines={2}>
-                {parsed.transcript}
-              </Text>
-            </View>
-          )}
-
-          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>المبلغ</Text>
-          <TextInput
-            style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="numeric"
-            placeholder="0.00"
-            placeholderTextColor={colors.textSecondary}
-          />
-
-          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>الوصف</Text>
-          <TextInput
-            style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="وصف المصروف"
-            placeholderTextColor={colors.textSecondary}
-          />
-
-          <Text style={[s.fieldLabel,{color:colors.textSecondary}]}>تاريخ المصروف YYYY-MM-DD</Text>
-          <TextInput accessibilityLabel="تاريخ المصروف" value={date} onChangeText={setDate} style={[s.input,{color:colors.text,backgroundColor:colors.surfaceAlt,borderColor:colors.border,writingDirection:'ltr'}]}/>
-          <Text style={[s.fieldLabel,{color:colors.textSecondary}]}>الحساب</Text>
-          <ScrollView horizontal contentContainerStyle={{gap:8}} style={{marginBottom:10}}>{accounts.map(a=><Pressable key={a.id} onPress={()=>setAccount(a.id)} style={{padding:10,borderRadius:12,borderWidth:1,borderColor:(account||accounts[0]?.id)===a.id?colors.primary:colors.border}}><Text style={{color:colors.text,fontFamily:'ArabicRegular'}}>{a.name}</Text></Pressable>)}</ScrollView>
-          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>الفئة</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-            {categories.map((cat) => {
-              const sel = selectedCategoryId === cat.id;
-              return (
-                <Pressable
-                  key={cat.id}
-                  style={[s.catChip, { backgroundColor: sel ? cat.color + "25" : colors.surfaceAlt, borderColor: sel ? cat.color : colors.border }]}
-                  onPress={() => setSelectedCategoryId(sel ? null : cat.id)}
-                >
-                  <Icon name={cat.icon} size={13} color={sel ? cat.color : colors.textSecondary} />
-                  <Text style={[s.catChipText, { color: sel ? cat.color : colors.textSecondary }]}>{cat.name}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>ملاحظة (اختياري)</Text>
-          <TextInput
-            style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
-            value={note}
-            onChangeText={setNote}
-            placeholder="ملاحظة إضافية"
-            placeholderTextColor={colors.textSecondary}
-          />
-
-          <View style={s.modalActions}>
-            <Pressable style={[s.cancelBtn, { borderColor: colors.border }]} onPress={onCancel}>
-              <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>إلغاء</Text>
-            </Pressable>
-            <Pressable style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={saving}>
-              {saving ? (
-                <ActivityIndicator size="small" color={colors.background} />
-              ) : (
-                <Text style={[s.saveBtnText, { color: colors.buttonText }]}>حفظ</Text>
-              )}
-            </Pressable>
-          </View>
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-}
-
 // ─── Home Screen ──────────────────────────────────────────────
 export default function HomeScreen() {
   const router=useRouter();
@@ -333,7 +195,7 @@ export default function HomeScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [parsedData, setParsedData] = useState<ParsedData | null>(null);
+  const [parsedData, setParsedData] = useState<ParsedExpense[] | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
@@ -352,9 +214,10 @@ export default function HomeScreen() {
     queryFn: () => getExpenses({ startDate: weekAgo }),
   });
 
+  const saveInFlight = useRef(false);
   const createMutation = useMutation({
-    mutationFn: (data: { amount: number; description: string; categoryId: number | null; note: string | null; date: string; accountId:number }) =>
-      createExpense(data),
+    mutationFn: (data: ExpenseInput[]) => createExpenses(data),
+    onSettled: () => { saveInFlight.current = false; },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
@@ -427,10 +290,9 @@ export default function HomeScreen() {
       });
       const provider = settings?.aiProvider ?? "gemini";
       const result = await parseVoiceExpense(base64, ext, provider, categories, uri, settings?.speechProvider ?? "gemini");
-      const hintId = await getCategoryHint(result.description);
-      if (hintId && !result.categoryName) {
-        const cat = categories.find((c) => c.id === hintId);
-        if (cat) result.categoryName = cat.name;
+      for (const item of result) {
+        const hintId = await getCategoryHint(item.description);
+        if (hintId && !item.categoryName) item.categoryName = categories.find(c => c.id === hintId)?.name ?? null;
       }
       setParsedData(result);
       setShowModal(true);
@@ -476,11 +338,11 @@ export default function HomeScreen() {
           </View>
 
           <Text style={[s.exampleText, { color: colors.textSecondary }]}>
-            مثال: "اشتريت قهوة بـ 50 جنيه"
+            مثال: "قهوة بـ20 ومواصلات بـ30 وخضار بـ100"
           </Text>
         </View>
 
-        <Pressable onPress={() => { setParsedData({ amount: null, description: "", categoryName: null, note: null, transcript: "" }); setShowModal(true); }} style={{ marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }}><Icon name="plus" size={18} color={colors.primary} /><Text style={{ color: colors.text, fontWeight: "700" }}>إضافة مصروف يدويًا</Text></Pressable>
+        <Pressable onPress={() => { setParsedData([{ amount: null, description: "", categoryName: null, note: null, transcript: "" }]); setShowModal(true); }} style={{ marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }}><Icon name="plus" size={18} color={colors.primary} /><Text style={{ color: colors.text, fontWeight: "700" }}>إضافة مصروف يدويًا</Text></Pressable>
         <WeeklySummaryCard colors={colors} />
 
         {monthlyGoal != null && monthlyGoal > 0 && (
@@ -515,14 +377,14 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      <ConfirmExpenseModal
+      <ExpenseReview
         visible={showModal}
         parsed={parsedData}
         categories={categories}
         saving={createMutation.isPending}
         colors={colors}
         onCancel={() => { setShowModal(false); setParsedData(null); }}
-        onSave={(data) => createMutation.mutate(data)}
+        onSave={(data) => { if (saveInFlight.current) return; saveInFlight.current = true; createMutation.mutate(data); }}
       />
     </View>
   );

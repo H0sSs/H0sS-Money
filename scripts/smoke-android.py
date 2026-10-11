@@ -36,12 +36,19 @@ def tap_scroll(label):
     raise RuntimeError(f'Control not reachable after scrolling: {label}')
 
 def fill_field(label,value):
-    for node in nodes():
-        if node.get('class')=='android.widget.EditText' and node.get('content-desc')==label:
-            coords=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
-            adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
-            time.sleep(1);adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
-            return
+    for attempt in range(10):
+        target=next((n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label),None)
+        if target is not None:
+            coords=list(map(int,re.findall(r'\d+',target.get('bounds',''))))
+            height=int(re.findall(r'\d+x(\d+)',adb('shell','wm','size'))[-1])
+            if len(coords)==4 and coords[3]>coords[1] and height*.08<(coords[1]+coords[3])//2<height*.9:
+                adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
+                time.sleep(1);adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
+                entered=next(n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label)
+                assert entered.get('text')==value,f'Incorrect input: {label}'
+                return
+            scroll_body(down=not(len(coords)==4 and coords[3]<height*.2))
+        else:scroll_body(down=attempt<5)
     raise RuntimeError(f'Input not found: {label}')
 
 def screenshot(name):
@@ -92,6 +99,22 @@ time.sleep(3)
 scroll_body(down=False)
 assert any('12.50' in n.get('text','') for n in nodes()), 'Home total did not update'
 screenshot('home-with-expense')
+# Exercise the same multi-item review and atomic save used by microphone results.
+tap_scroll('إضافة مصروف يدويًا')
+fill_field('مبلغ الصنف 1','19.75')
+fill_field('وصف الصنف 1','QA_bread')
+tap_scroll('إضافة صنف آخر')
+fill_field('مبلغ الصنف 2','7.25')
+fill_field('وصف الصنف 2','QA_bus')
+screenshot('batch-review')
+tap_scroll('حفظ')
+time.sleep(3)
+scroll_body(down=False)
+for _ in range(4):
+    if any('39.50' in n.get('text','') for n in nodes()):break
+    scroll_body(down=False)
+assert any('39.50' in n.get('text','') for n in nodes()), 'Batch total missing an item'
+screenshot('home-with-batch')
 for label,name in [('الإحصائيات','stats'),('المصاريف','expenses'),('الإعدادات','admin')]:
     tap(label)
     screenshot(name)
@@ -125,6 +148,6 @@ if switches:
 adb('shell','am','force-stop','com.hossmoney.app')
 adb('shell','am','start','-W','-n','com.hossmoney.app/.MainActivity')
 time.sleep(8)
-assert any('12.50' in n.get('text','') for n in nodes()), 'Expense did not survive restart'
+assert any('39.50' in n.get('text','') for n in nodes()), 'Batch expenses did not survive restart'
 screenshot('restart-persistence')
-Path('smoke/result.txt').write_text('PASS: cold launch, manual expense and income, refreshed total, four tabs and financial pages, dark/light switch, restart persistence.\n')
+Path('smoke/result.txt').write_text('PASS: cold launch, single and multi-item expenses plus income, refreshed batch total, four tabs and financial pages, dark/light switch, restart persistence.\n')

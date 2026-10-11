@@ -15,6 +15,7 @@ const database = {
   runAsync: async (sql,args=[]) => { if(failInsert && sql.startsWith('INSERT INTO categories')) throw Error('disk error'); const r=native.prepare(sql).run(...args); return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) }; },
   withExclusiveTransactionAsync: async fn => { native.exec('BEGIN'); try { await fn(database); native.exec('COMMIT'); } catch(e) { native.exec('ROLLBACK'); throw e; } },
 };
+let aiFetch = global.fetch;
 const cache = new Map();
 const secure = new Map();
 const mocks = {
@@ -29,7 +30,7 @@ function load(file){
  const module={exports:{}}; cache.set(file,module.exports);
  const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  const req=name=>mocks[name]??(name.startsWith('.')?load(path.resolve(path.dirname(file),name+'.ts')):require(name));
- vm.runInNewContext(`(function(require,module,exports){${code}\n})`,{console,fetch:global.fetch,AbortController,setTimeout,clearTimeout,FormData})(req,module,module.exports);
+ vm.runInNewContext(`(function(require,module,exports){${code}\n})`,{console,fetch:(...args)=>aiFetch(...args),AbortController,setTimeout,clearTimeout,FormData})(req,module,module.exports);
  cache.set(file,module.exports);return module.exports;
 }
 const dates=load('lib/dates.ts'), validation=load('lib/validation.ts'), db=load('lib/db.ts'), services=load('lib/services.ts'), ai=load('lib/ai.ts');
@@ -118,4 +119,43 @@ test('v3 backup preserves all financial relations, merges idempotently and rejec
  json.finance.debt_payments[0].amount=999;
  await assert.rejects(()=>services.importBackup(JSON.stringify(json),'replace'));
  assert.equal((await services.getExpenses()).length,counts);
+});
+
+test('multi-item AI validation preserves every price and category and never silently drops an item',()=>{
+ const categories=[{name:'أكل'},{name:'مواصلات'},{name:'تسوق'}];
+ const raw=JSON.stringify({expenses:[{amount:'٢٠',description:'قهوة',categoryName:'أكل'},{amount:30,description:'تاكسي',categoryName:'مواصلات'},{amount:null,description:'خضار',categoryName:'غير موجود'}]});
+ const result=ai.validateParsedExpenses(raw,'قهوة بعشرين وتاكسي بتلاتين وخضار',categories);
+ assert.equal(result.length,3);assert.deepEqual(Array.from(result,r=>r.amount),[20,30,null]);assert.deepEqual(Array.from(result,r=>r.categoryName),['أكل','مواصلات',null]);
+ assert.equal(result[2].description,'خضار');assert.equal(result[2].transcript,'قهوة بعشرين وتاكسي بتلاتين وخضار');
+ assert.equal(ai.validateParsedExpenses('{"amount":15,"description":"شاي"}','شاي',categories).length,1);
+ for(const value of [{expenses:[]},{expenses:null},{expenses:[null]},{expenses:Array.from({length:51},()=>({amount:1,description:'صنف'}))}])assert.throws(()=>ai.validateParsedExpenses(JSON.stringify(value),'نص',categories));
+ assert.throws(()=>ai.validateParsedExpenses('{"expenses":[{"amount":10},','نص',categories));
+});
+test('Gemini, OpenAI and GLM-5 analysis all request and return multiple separate expenses',async()=>{
+ const response=JSON.stringify({expenses:[{amount:20,description:'قهوة',categoryName:'أكل'},{amount:30,description:'تاكسي',categoryName:'مواصلات'},{amount:100,description:'خضار',categoryName:'تسوق'}]});
+ try{
+  for(const provider of ['gemini','openai','zai']){
+   await ai.saveAPIKey(provider,'test-only-key');
+   aiFetch=async(url,init)=>{
+    const body=JSON.parse(init.body);const prompt=provider==='gemini'?body.contents[0].parts[0].text:body.messages[0].content;
+    assert.ok(prompt.includes('جميع المصاريف'));assert.ok(prompt.includes('expenses'));assert.ok(prompt.includes('لا تخترع أسعارًا'));
+    if(provider==='zai')assert.equal(body.model,'glm-5');
+    return {ok:true,json:async()=>provider==='gemini'?{candidates:[{content:{parts:[{text:response}]}}]}:{choices:[{message:{content:response}}]}};
+   };
+   const result=await ai.parseTextExpense('قهوة بعشرين وتاكسي بتلاتين وخضار بمية',provider,[{name:'أكل'},{name:'مواصلات'},{name:'تسوق'}]);
+   assert.deepEqual(Array.from(result,r=>r.amount),[20,30,100]);assert.equal(result.length,3);
+  }
+ }finally{aiFetch=global.fetch;secure.clear();}
+});
+test('batch expense save commits all categories and prices or rolls back the entire list',async()=>{
+ await db.initDB();const cash=(await finance.getAccounts()).find(a=>a.uid==='default-cash');
+ const categories=await services.getCategories();assert.ok(categories.length>=2);
+ const before=(await services.getExpenses()).length;
+ const result=await services.createExpenses([{amount:19.75,description:'batch-coffee',categoryId:categories[0].id,date:'2026-10-11',accountId:cash.id},{amount:7.25,description:'batch-bus',categoryId:categories[1].id,date:'2026-10-11',accountId:cash.id}]);
+ assert.equal(result.length,2);assert.equal(result[0].category_id,categories[0].id);assert.equal(result[1].category_id,categories[1].id);assert.equal(result[0].amount+result[1].amount,27);assert.notEqual(result[0].uid,result[1].uid);
+ assert.equal((await services.getExpenses()).length,before+2);
+ await assert.rejects(()=>services.createExpenses([{amount:10,description:'must-rollback',accountId:cash.id},{amount:20,description:'bad-account',accountId:2147483647}]));
+ assert.equal((await services.getExpenses()).length,before+2);assert.ok(!(await services.getExpenses()).some(e=>e.description==='must-rollback'));
+ await assert.rejects(()=>services.createExpenses([{amount:10,description:'valid'},{amount:0,description:'missing price'}]));assert.equal((await services.getExpenses()).length,before+2);
+ await assert.rejects(()=>services.createExpenses([]));
 });

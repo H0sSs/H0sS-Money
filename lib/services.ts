@@ -156,39 +156,36 @@ function mapExpenseRow(row: any): Expense {
   };
 }
 
-export async function createExpense(data: {
-  amount: number;
-  description: string;
-  categoryId?: number | null;
-  note?: string | null;
-  date?: string;
-  accountId?: number;
-}): Promise<Expense> {
-  if (!validAmount(data.amount) || !data.description.trim()) throw new Error("أدخل مبلغًا موجبًا ووصفًا صحيحًا");
-  const date = data.date ?? localDate();
-  parseDate(date);
-  const res = await db.runAsync(
-    "INSERT INTO expenses (amount, description, category_id, note, date, uid, account_id) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT id FROM accounts WHERE uid='default-cash')))",
-    [data.amount, data.description.trim(), data.categoryId ?? null, data.note ?? null, date, Crypto.randomUUID(), data.accountId ?? null]
-  );
-  const rows = await db.getAllAsync<any>(
-    `SELECT e.*, c.id as cat_id, c.name as cat_name, c.icon as cat_icon, c.color as cat_color, c.budget as cat_budget, c.created_at as cat_created_at
-     FROM expenses e LEFT JOIN categories c ON e.category_id = c.id WHERE e.id = ?`,
-    [res.lastInsertRowId]
-  );
-  const expense = mapExpenseRow(rows[0]);
-  // Fire-and-forget: check budgets and send local notifications if needed.
-  // Auto-backup is intentionally NOT called here — Drive backup/restore is manual only.
-  import("./notifications")
-    .then((m) =>
-      m.checkAndNotify({
-        amount: expense.amount,
-        date: expense.date,
-        category_id: expense.category_id,
-      })
-    )
-    .catch(() => {});
-  return expense;
+export type ExpenseInput = {
+  amount: number; description: string; categoryId?: number | null; note?: string | null;
+  date?: string; accountId?: number;
+};
+export async function createExpense(data: ExpenseInput): Promise<Expense> {
+  return (await createExpenses([data]))[0];
+}
+export async function createExpenses(items: ExpenseInput[]): Promise<Expense[]> {
+  if (!Array.isArray(items) || !items.length || items.length > 50) throw new Error("أضف من 1 إلى 50 صنفًا");
+  const prepared = items.map((data, index) => {
+    if (!validAmount(data.amount) || !data.description.trim()) throw new Error(`راجع مبلغ ووصف الصنف ${index + 1}`);
+    const date = data.date ?? localDate(); parseDate(date);
+    return { ...data, date, description: data.description.trim().slice(0, 500), note: data.note?.slice(0, 1000) ?? null };
+  });
+  const expenses: Expense[] = [];
+  await db.withExclusiveTransactionAsync(async tx => {
+    for (const data of prepared) {
+      const account = await tx.getFirstAsync<{id:number}>(data.accountId != null ? "SELECT id FROM accounts WHERE id=?" : "SELECT id FROM accounts WHERE uid='default-cash'", data.accountId != null ? [data.accountId] : []);
+      if (!account) throw new Error("الحساب غير موجود؛ لم تُحفظ القائمة");
+      if (data.categoryId != null && !await tx.getFirstAsync("SELECT id FROM categories WHERE id=?", [data.categoryId])) throw new Error("الفئة غير موجودة؛ لم تُحفظ القائمة");
+      const res = await tx.runAsync("INSERT INTO expenses (amount, description, category_id, note, date, uid, account_id) VALUES (?, ?, ?, ?, ?, ?, ?)", [data.amount, data.description, data.categoryId ?? null, data.note, data.date, Crypto.randomUUID(), account.id]);
+      const row = await tx.getFirstAsync<any>(`SELECT e.*, c.id as cat_id, c.name as cat_name, c.icon as cat_icon, c.color as cat_color, c.budget as cat_budget, c.created_at as cat_created_at FROM expenses e LEFT JOIN categories c ON e.category_id=c.id WHERE e.id=?`, [res.lastInsertRowId]);
+      expenses.push(mapExpenseRow(row));
+    }
+  });
+  // Notify only after every item commits; a failed batch saves none.
+  import("./notifications").then(async m => {
+    for (const expense of expenses) await m.checkAndNotify({ amount: expense.amount, date: expense.date, category_id: expense.category_id });
+  }).catch(() => {});
+  return expenses;
 }
 
 export async function updateExpense(

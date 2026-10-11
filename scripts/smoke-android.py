@@ -10,11 +10,18 @@ def nodes():
     return ET.fromstring(adb('shell', 'cat', '/sdcard/window.xml')).iter('node')
 
 def tap(label, optional=False):
-    for node in nodes():
+    visible_nodes=list(nodes())
+    height=int(re.findall(r'\d+x(\d+)', adb('shell','wm','size'))[-1])
+    safe_bottom=int(height*.93)
+    for n in visible_nodes:
+        if n.get('content-desc','').startswith('الرئيسية'):
+            b=list(map(int,re.findall(r'\d+',n.get('bounds',''))))
+            if len(b)==4 and b[1]>height*.7:safe_bottom=min(safe_bottom,b[1])
+    for node in visible_nodes:
         values=[node.get('text',''),node.get('content-desc','')]
         if any(value==label or value.startswith(label+',') for value in values):
             coords=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
-            if len(coords)==4 and coords[2]>coords[0] and coords[3]>coords[1]:
+            if len(coords)==4 and coords[2]>coords[0] and coords[3]>coords[1] and (coords[1]+coords[3])//2<safe_bottom:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
                 time.sleep(2)
                 return True
@@ -88,7 +95,7 @@ for label,name in [('الإحصائيات','stats'),('المصاريف','expense
     tap(label)
     screenshot(name)
     if name=='stats':
-        scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison')
+        scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison'); scroll_body(); screenshot('stats-comparison-full')
 for label,name in [('الحسابات والأرصدة','accounts'),('الدخل','income'),('الديون والسداد','debts'),('المصاريف المتكررة','recurring')]:
     tap(label)
     screenshot(name)
@@ -108,6 +115,7 @@ for _ in range(4):
     if switches:break
     scroll_body()
     switches=[n for n in nodes() if n.get('class')=='android.widget.Switch']
+assert switches, 'Theme switch not reached'
 if switches:
     coords=list(map(int,re.findall(r'\d+',switches[0].get('bounds',''))))
     adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
@@ -118,4 +126,4 @@ adb('shell','am','start','-W','-n','com.hossmoney.app/.MainActivity')
 time.sleep(8)
 assert any('12.50' in n.get('text','') for n in nodes()), 'Expense did not survive restart'
 screenshot('restart-persistence')
-Path('smoke/result.txt').write_text('PASS: cold launch, manual expense, refreshed total, four tabs, restart persistence.\n')
+Path('smoke/result.txt').write_text('PASS: cold launch, manual expense and income, refreshed total, four tabs and financial pages, dark/light switch, restart persistence.\n')

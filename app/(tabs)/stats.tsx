@@ -1,8 +1,8 @@
 import PageHeader from "@/components/PageHeader";
 import { escapeHtml } from "@/lib/validation";
-import { localDate, parseDate } from "@/lib/dates";
+import { localDate, parseDate, monthRange } from "@/lib/dates";
 import React, { useState, useMemo, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, useWindowDimensions, Modal, Alert, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, useWindowDimensions, Modal, Alert, ActivityIndicator, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import Svg, {
@@ -29,6 +29,8 @@ import Icon from "@/components/Icon";
 const PERIODS = [
   { key: "week", label: "أسبوع" },
   { key: "month", label: "30 يوم" },
+  { key: "calendarMonth", label: "الشهر الحالي" },
+  { key: "custom", label: "فترة" },
 ] as const;
 
 const CHART_W = 340;
@@ -37,7 +39,7 @@ function EmptyState({ colors, label }: { colors: any; label: string }) {
   return (
     <View style={{ alignItems: "center", padding: 28 }}>
       <Icon name="bar-chart-2" size={36} color={colors.textSecondary} />
-      <Text style={{ color: colors.textSecondary, marginTop: 10, fontFamily: "Inter_400Regular" }}>
+      <Text style={{ color: colors.textSecondary, marginTop: 10, fontFamily: "ArabicRegular" }}>
         {label}
       </Text>
     </View>
@@ -99,7 +101,7 @@ function LineChart({
         return (
           <G key={i}>
             <Line x1={padL} y1={y} x2={padL + innerW} y2={y} stroke={colors.border} strokeWidth={1} opacity={0.5} />
-            <SvgText x={padL - 6} y={y + 3} fontSize={9} fill={colors.textSecondary} textAnchor="end" fontFamily="Inter_400Regular">
+            <SvgText x={padL - 6} y={y + 3} fontSize={9} fill={colors.textSecondary} textAnchor="end" fontFamily="ArabicRegular">
               {val >= 1000 ? `${(val / 1000).toFixed(1)}k` : Math.round(val)}
             </SvgText>
           </G>
@@ -132,7 +134,7 @@ function LineChart({
             fontSize={9}
             fill={colors.textSecondary}
             textAnchor="middle"
-            fontFamily="Inter_400Regular"
+            fontFamily="ArabicRegular"
           >
             {p.date.slice(5)}
           </SvgText>
@@ -192,7 +194,7 @@ function DonutChart({
 
   return (
     <View style={{ alignItems: "center" }}>
-      <Svg width={size} height={size}>
+      <View style={{ width: size, height: size }}><View pointerEvents="none" style={{ position: "absolute", top: 62, left: 25, right: 25, alignItems: "center" }}><Text style={{ color: colors.textSecondary, fontFamily: "ArabicRegular", fontSize: 11 }}>الإجمالي</Text><Text style={{ color: colors.text, fontFamily: "ArabicBold", fontSize: 20, writingDirection: "ltr" }}>{total.toFixed(2)}</Text><Text style={{ color: colors.textSecondary, fontSize: 11 }}>{currency}</Text></View><Svg width={size} height={size}>
         <G rotation={-90} origin={`${cx}, ${cy}`}>
           <Circle cx={cx} cy={cy} r={r} stroke={colors.border} strokeWidth={stroke} fill="none" opacity={0.4} />
           {data.map((seg, i) => {
@@ -233,40 +235,10 @@ function DonutChart({
             />
           );
         })}
-        <SvgText
-          x={cx}
-          y={cy - 4}
-          fontSize={11}
-          fill={colors.textSecondary}
-          textAnchor="middle"
-          fontFamily="Inter_400Regular"
-        >
-          الإجمالي
-        </SvgText>
-        <SvgText
-          x={cx}
-          y={cy + 14}
-          fontSize={16}
-          fill={colors.text}
-          textAnchor="middle"
-          fontFamily="Inter_700Bold"
-        >
-          {total >= 1000 ? `${(total / 1000).toFixed(1)}k` : Math.round(total)}
-        </SvgText>
-        <SvgText
-          x={cx}
-          y={cy + 28}
-          fontSize={9}
-          fill={colors.textSecondary}
-          textAnchor="middle"
-          fontFamily="Inter_400Regular"
-        >
-          {currency}
-        </SvgText>
-      </Svg>
+      </Svg></View>
 
       <View style={{ marginTop: 14, gap: 4, alignSelf: "stretch" }}>
-        {data.slice(0, 6).map((seg) => {
+        {data.map((seg) => {
           const pct = (seg.total / total) * 100;
           return (
             <Pressable
@@ -283,20 +255,20 @@ function DonutChart({
               })}
             >
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: seg.color }} />
-              <Text style={{ flex: 1, color: colors.text, fontSize: 13, fontFamily: "Inter_400Regular" }}>
+              <Text style={{ flex: 1, color: colors.text, fontSize: 13, fontFamily: "ArabicRegular" }}>
                 {seg.name}
               </Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "Inter_400Regular" }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "ArabicRegular" }}>
                 {pct.toFixed(0)}%
               </Text>
-              <Text style={{ color: colors.primary, fontSize: 13, fontFamily: "Inter_600SemiBold", minWidth: 70, textAlign: "left" }}>
+              <Text style={{ color: colors.primary, fontSize: 13, fontFamily: "ArabicBold", minWidth: 70, textAlign: "left" }}>
                 {Number(seg.total).toFixed(2)}
               </Text>
               <Icon name="chevron-left" size={14} color={colors.textSecondary} />
             </Pressable>
           );
         })}
-        <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 4 }}>
+        <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: "ArabicRegular", textAlign: "center", marginTop: 4 }}>
           اضغط على فئة لعرض مصاريفها
         </Text>
       </View>
@@ -335,7 +307,7 @@ function CompareBars({
   };
 
   return (
-    <Svg width={width} height={height}>
+    <View><Svg width={width} height={height-25}>
       <Defs>
         <LinearGradient id="curBar" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={colors.primary} stopOpacity={1} />
@@ -350,27 +322,14 @@ function CompareBars({
       <Rect x={cxPrev} y={padT + innerH - prevH} width={barW} height={prevH} rx={10} fill="url(#prevBar)" />
       <Rect x={cxCur} y={padT + innerH - curH} width={barW} height={curH} rx={10} fill="url(#curBar)" />
 
-      <SvgText x={cxPrev + barW / 2} y={padT + innerH - prevH - 6} fontSize={11} fill={colors.text} textAnchor="middle" fontFamily="Inter_600SemiBold">
+      <SvgText x={cxPrev + barW / 2} y={padT + innerH - prevH - 6} fontSize={11} fill={colors.text} textAnchor="middle" fontFamily="ArabicBold">
         {previous.total >= 1000 ? `${(previous.total / 1000).toFixed(1)}k` : Math.round(previous.total)}
       </SvgText>
-      <SvgText x={cxCur + barW / 2} y={padT + innerH - curH - 6} fontSize={11} fill={colors.primary} textAnchor="middle" fontFamily="Inter_600SemiBold">
+      <SvgText x={cxCur + barW / 2} y={padT + innerH - curH - 6} fontSize={11} fill={colors.primary} textAnchor="middle" fontFamily="ArabicBold">
         {current.total >= 1000 ? `${(current.total / 1000).toFixed(1)}k` : Math.round(current.total)}
       </SvgText>
 
-      <SvgText x={cxPrev + barW / 2} y={height - 18} fontSize={11} fill={colors.text} textAnchor="middle" fontFamily="Inter_600SemiBold">
-        {monthName(previous.month)}
-      </SvgText>
-      <SvgText x={cxPrev + barW / 2} y={height - 5} fontSize={9} fill={colors.textSecondary} textAnchor="middle" fontFamily="Inter_400Regular">
-        الشهر السابق
-      </SvgText>
-
-      <SvgText x={cxCur + barW / 2} y={height - 18} fontSize={11} fill={colors.text} textAnchor="middle" fontFamily="Inter_600SemiBold">
-        {monthName(current.month)}
-      </SvgText>
-      <SvgText x={cxCur + barW / 2} y={height - 5} fontSize={9} fill={colors.textSecondary} textAnchor="middle" fontFamily="Inter_400Regular">
-        الشهر الحالي
-      </SvgText>
-    </Svg>
+    </Svg><View style={{ flexDirection: "row", justifyContent: "center", gap: 36 }}>{[previous,current].map((m,i)=><View key={m.month} style={{ width: barW, alignItems: "center" }}><Text style={{ color: colors.text, fontFamily: "ArabicBold", fontSize: 12 }}>{monthName(m.month)}</Text><Text style={{ color: colors.textSecondary, fontFamily: "ArabicRegular", fontSize: 10 }}>{i===0?"الشهر السابق":"الشهر الحالي"}</Text></View>)}</View></View>
   );
 }
 
@@ -379,15 +338,23 @@ export default function StatsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { colors } = useTheme();
-  const [period, setPeriod] = useState<"week" | "month">("month");
+  const [period, setPeriod] = useState<"week" | "month" | "calendarMonth" | "custom">("calendarMonth");
   const [drillDate, setDrillDate] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"image" | "pdf" | null>(null);
   const shotRef = useRef<View>(null);
 
   const today = localDate();
+  const [startInput,setStartInput]=useState(monthRange().start);
+  const [endInput,setEndInput]=useState(today);
+  const [customRange,setCustomRange]=useState({start:monthRange().start,end:today});
+  const range = period==='custom' ? customRange : period==='calendarMonth' ? monthRange(today) : {start:localDate(new Date(parseDate(today).setDate(parseDate(today).getDate()-(period==='week'?6:29)))),end:today};
+  const calendarMs=(s:string)=>{const d=parseDate(s);return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());};
+  const dayCount=Math.round((calendarMs(range.end)-calendarMs(range.start))/86400000)+1;
+  const periodLabel=period==='week'?'آخر 7 أيام':period==='month'?'آخر 30 يوم':period==='calendarMonth'?'الشهر الحالي':range.start+' — '+range.end;
+
   const { data: stats, isLoading } = useQuery({
-    queryKey: ["stats", period, today],
-    queryFn: () => getStats(period, today),
+    queryKey: ["stats", period, today, range.start,range.end],
+    queryFn: () => getStats(period, today, range),
   });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => getSettings() });
   const { data: compare, isLoading: compareLoading } = useQuery({
@@ -399,10 +366,10 @@ export default function StatsScreen() {
   // Fill missing days with zero for a continuous line
   const filledByDay = useMemo(() => {
     if (!stats?.byDay) return [];
-    const days = period === "week" ? 7 : 30;
+    const days = dayCount;
     const map = new Map(stats.byDay.map((d) => [d.date, d.total]));
     const out: { date: string; total: number }[] = [];
-    const end = parseDate(today);
+    const end = parseDate(range.end);
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(end.getDate() - i);
@@ -410,7 +377,7 @@ export default function StatsScreen() {
       out.push({ date: k, total: map.get(k) ?? 0 });
     }
     return out;
-  }, [stats, period, today]);
+  }, [stats, period, today, range.start,range.end]);
 
   const diffPositive = (compare?.diff ?? 0) >= 0;
 
@@ -438,7 +405,7 @@ export default function StatsScreen() {
       setExporting("pdf");
       const total = Number(stats?.total ?? 0).toFixed(2);
       const cnt = stats?.count ?? 0;
-      const periodLabel = period === "week" ? "آخر 7 أيام" : "آخر 30 يوم";
+
       const catRows = (stats?.byCategory ?? [])
         .map((c) => `<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${/^#[0-9a-f]{6}$/i.test(c.color) ? c.color : "#9CA3AF"};margin-left:8px"></span>${escapeHtml(c.name)}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:left">${c.total.toFixed(2)} ${escapeHtml(currency)}</td></tr>`)
         .join("");
@@ -451,7 +418,7 @@ export default function StatsScreen() {
           .compare{display:flex;gap:24px} .compare>div{flex:1}
         </style></head><body>
         <h1>H0sS-Money</h1><div class="sub">تقرير الإحصائيات — ${periodLabel} — ${new Date().toLocaleDateString("ar-EG")}</div>
-        <div class="card"><div style="color:#666;font-size:12px">إجمالي الإنفاق</div><div class="big">${total} ${escapeHtml(currency)}</div><div style="color:#666;font-size:13px;margin-top:6px">${cnt} عملية · بمتوسط يومي ${(Number(stats?.total ?? 0) / (period === "week" ? 7 : 30)).toFixed(2)} ${escapeHtml(currency)}</div></div>
+        <div class="card"><div style="color:#666;font-size:12px">إجمالي الإنفاق</div><div class="big">${total} ${escapeHtml(currency)}</div><div style="color:#666;font-size:13px;margin-top:6px">${cnt} عملية · بمتوسط يومي ${(Number(stats?.total ?? 0) / dayCount).toFixed(2)} ${escapeHtml(currency)}</div></div>
         <div class="card"><h3 style="margin-top:0">توزيع الفئات</h3><table>${catRows || '<tr><td style="padding:8px;color:#999">لا توجد بيانات</td></tr>'}</table></div>
         ${compare ? `<div class="card"><h3 style="margin-top:0">مقارنة شهرية</h3><div class="compare"><div><div style="color:#666;font-size:12px">${compare.previous.month}</div><div style="font-size:22px;font-weight:600">${compare.previous.total.toFixed(2)} ${escapeHtml(currency)}</div></div><div><div style="color:#666;font-size:12px">${compare.current.month}</div><div style="font-size:22px;font-weight:600;color:#F0B429">${compare.current.total.toFixed(2)} ${escapeHtml(currency)}</div></div></div><div style="margin-top:12px;padding:12px;background:${diffPositive ? "#fef2f2" : "#f0fdf4"};border-radius:10px;color:${diffPositive ? "#b91c1c" : "#15803d"};font-weight:600">${diffPositive ? "زاد" : "قل"} الإنفاق بـ ${Math.abs(compare.diff).toFixed(2)} ${escapeHtml(currency)} (${compare.diffPct >= 0 ? "+" : ""}${compare.diffPct.toFixed(1)}%)</div></div>` : ""}
         </body></html>`;
@@ -492,6 +459,12 @@ export default function StatsScreen() {
           ))}
         </View>
 
+        {period==='custom'&&<View style={[s.card,{backgroundColor:colors.surface,borderColor:colors.border,gap:8}]}>
+          <Text style={{color:colors.text,fontFamily:'ArabicRegular',textAlign:'right'}}>من / إلى — YYYY-MM-DD</Text>
+          <TextInput accessibilityLabel="بداية فترة الإحصائيات" value={startInput} onChangeText={setStartInput} style={{color:colors.text,padding:12,borderWidth:1,borderColor:colors.border,borderRadius:10,writingDirection:'ltr'}}/>
+          <TextInput accessibilityLabel="نهاية فترة الإحصائيات" value={endInput} onChangeText={setEndInput} style={{color:colors.text,padding:12,borderWidth:1,borderColor:colors.border,borderRadius:10,writingDirection:'ltr'}}/>
+          <Pressable onPress={()=>{try{const a=calendarMs(startInput),b=calendarMs(endInput);if(b<a||b-a>729*86400000)throw Error('اختر فترة مرتبة لا تزيد عن 730 يومًا');setCustomRange({start:startInput,end:endInput});}catch(e){Alert.alert('فترة غير صالحة',e instanceof Error?e.message:'راجع التاريخ');}}} style={{padding:12,backgroundColor:colors.primary,borderRadius:10}}><Text style={{color:colors.buttonText,textAlign:'center',fontFamily:'ArabicBold'}}>تطبيق الفترة</Text></Pressable>
+        </View>}
         {/* Total + line chart */}
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 14 }}>
@@ -507,10 +480,10 @@ export default function StatsScreen() {
             </View>
           </View>
           <Text style={[s.sectionTitle, { color: colors.text, marginBottom: 6 }]}>
-            تطور الإنفاق ({period === "week" ? "آخر 7 أيام" : "آخر 30 يوم"})
+            تطور الإنفاق ({periodLabel})
           </Text>
           {isLoading ? null : <LineChart data={filledByDay} colors={colors} onPointPress={setDrillDate} />}
-          <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 6 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: "ArabicRegular", textAlign: "center", marginTop: 6 }}>
             اضغط على نقطة لعرض تفاصيل اليوم
           </Text>
         </View>
@@ -553,7 +526,7 @@ export default function StatsScreen() {
                     size={18}
                     color={diffPositive ? "#EF4444" : "#10B981"}
                   />
-                  <Text style={{ color: colors.text, fontSize: 13, fontFamily: "Inter_600SemiBold" }}>
+                  <Text style={{ color: colors.text, fontSize: 13, fontFamily: "ArabicBold" }}>
                     {diffPositive ? "زاد إنفاقك" : "قل إنفاقك"} عن الشهر الماضي بـ
                   </Text>
                 </View>
@@ -561,12 +534,12 @@ export default function StatsScreen() {
                   style={{
                     color: diffPositive ? "#EF4444" : "#10B981",
                     fontSize: 18,
-                    fontFamily: "Inter_700Bold",
+                    fontFamily: "ArabicBold",
                     marginTop: 4,
                   }}
                 >
                   {Math.abs(compare.diff).toFixed(2)} {currency}{" "}
-                  <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textSecondary }}>
+                  <Text style={{ fontSize: 12, fontFamily: "ArabicRegular", color: colors.textSecondary }}>
                     ({compare.diffPct >= 0 ? "+" : ""}
                     {compare.diffPct.toFixed(1)}%)
                   </Text>
@@ -581,9 +554,7 @@ export default function StatsScreen() {
           <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[s.sectionTitle, { color: colors.text, marginBottom: 12 }]}>المتوسط اليومي</Text>
             <Text style={[s.bigAmount, { color: colors.primary, fontSize: 26 }]}>
-              {period === "week"
-                ? (Number(stats.total) / 7).toFixed(2)
-                : (Number(stats.total) / 30).toFixed(2)}{" "}
+              {(Number(stats.total) / dayCount).toFixed(2)}{" "}
               <Text style={{ fontSize: 14 }}>{currency}</Text>
             </Text>
           </View>
@@ -607,7 +578,7 @@ export default function StatsScreen() {
               >
                 <Icon name="chevron-right" size={20} color={colors.primary} />
               </Pressable>
-              <Text style={{ color: colors.text, fontSize: 15, fontFamily: "Inter_700Bold", flex: 1, textAlign: "center" }}>
+              <Text style={{ color: colors.text, fontSize: 15, fontFamily: "ArabicBold", flex: 1, textAlign: "center" }}>
                 {drillDate ? parseDate(drillDate).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" }) : ""}
               </Text>
               <Pressable
@@ -630,51 +601,51 @@ export default function StatsScreen() {
               </Pressable>
             </View>
             <View style={[s.diffBox, { borderColor: colors.border, backgroundColor: colors.background, marginTop: 0, marginBottom: 14 }]}>
-              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "Inter_400Regular" }}>إجمالي اليوم</Text>
-              <Text style={{ color: colors.primary, fontSize: 22, fontFamily: "Inter_700Bold", marginTop: 4 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "ArabicRegular" }}>إجمالي اليوم</Text>
+              <Text style={{ color: colors.primary, fontSize: 22, fontFamily: "ArabicBold", marginTop: 4 }}>
                 {drillExpenses.reduce((sum, e) => sum + Number(e.amount), 0).toFixed(2)} {currency}
               </Text>
               <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{drillExpenses.length} عملية</Text>
             </View>
             {drillExpenses.length > 0 && (
               <View style={{ marginBottom: 14 }}>
-                <Text style={{ color: colors.text, fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 8 }}>أكبر 3 مصاريف</Text>
+                <Text style={{ color: colors.text, fontSize: 13, fontFamily: "ArabicBold", marginBottom: 8 }}>أكبر 3 مصاريف</Text>
                 {[...drillExpenses]
                   .sort((a, b) => Number(b.amount) - Number(a.amount))
                   .slice(0, 3)
                   .map((e, idx) => (
                     <View key={`top-${e.id}`} style={[s.topRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
                       <View style={[s.topRank, { backgroundColor: colors.primary + "22" }]}>
-                        <Text style={{ color: colors.primary, fontSize: 12, fontFamily: "Inter_700Bold" }}>{idx + 1}</Text>
+                        <Text style={{ color: colors.primary, fontSize: 12, fontFamily: "ArabicBold" }}>{idx + 1}</Text>
                       </View>
                       <View style={[s.drillDot, { backgroundColor: e.category?.color ?? colors.primary }]} />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontSize: 14, fontFamily: "Inter_600SemiBold" }} numberOfLines={1}>{e.description}</Text>
+                        <Text style={{ color: colors.text, fontSize: 14, fontFamily: "ArabicBold" }} numberOfLines={1}>{e.description}</Text>
                         <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{e.category?.name ?? "بدون فئة"}</Text>
                       </View>
-                      <Text style={{ color: colors.primary, fontSize: 15, fontFamily: "Inter_700Bold" }}>{Number(e.amount).toFixed(2)}</Text>
+                      <Text style={{ color: colors.primary, fontSize: 15, fontFamily: "ArabicBold" }}>{Number(e.amount).toFixed(2)}</Text>
                     </View>
                   ))}
               </View>
             )}
             {drillExpenses.length > 3 && (
-              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 8 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 8 }}>
                 كل العمليات
               </Text>
             )}
             <ScrollView style={{ maxHeight: 320 }}>
               {drillExpenses.length === 0 ? (
-                <Text style={{ color: colors.textSecondary, textAlign: "center", padding: 20, fontFamily: "Inter_400Regular" }}>
+                <Text style={{ color: colors.textSecondary, textAlign: "center", padding: 20, fontFamily: "ArabicRegular" }}>
                   لا توجد عمليات في هذا اليوم
                 </Text>
               ) : drillExpenses.map((e: Expense) => (
                 <View key={e.id} style={[s.drillRow, { borderColor: colors.border }]}>
                   <View style={[s.drillDot, { backgroundColor: e.category?.color ?? colors.primary }]} />
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontSize: 14, fontFamily: "Inter_500Medium" }} numberOfLines={1}>{e.description}</Text>
+                    <Text style={{ color: colors.text, fontSize: 14, fontFamily: "ArabicRegular" }} numberOfLines={1}>{e.description}</Text>
                     <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{e.category?.name ?? "بدون فئة"}</Text>
                   </View>
-                  <Text style={{ color: colors.primary, fontSize: 15, fontFamily: "Inter_700Bold" }}>{Number(e.amount).toFixed(2)}</Text>
+                  <Text style={{ color: colors.primary, fontSize: 15, fontFamily: "ArabicBold" }}>{Number(e.amount).toFixed(2)}</Text>
                 </View>
               ))}
             </ScrollView>
@@ -696,14 +667,14 @@ const s = StyleSheet.create({
   drillDot: { width: 10, height: 10, borderRadius: 5 },
   container: { flex: 1 },
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
-  title: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  title: { fontSize: 22, fontFamily: "ArabicBold" },
+  subtitle: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 2 },
   periodBar: { flexDirection: "row", marginHorizontal: 16, marginBottom: 16, borderRadius: 14, padding: 4, borderWidth: 1, gap: 4 },
   periodBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center" },
-  periodText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  periodText: { fontSize: 11, fontFamily: "ArabicBold" },
   card: { marginHorizontal: 16, marginBottom: 14, borderRadius: 22, borderWidth: 1, padding: 20 },
-  cardLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 4 },
-  bigAmount: { fontSize: 32, fontFamily: "Inter_700Bold" },
-  sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  cardLabel: { fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 4 },
+  bigAmount: { fontSize: 32, fontFamily: "ArabicBold" },
+  sectionTitle: { fontSize: 16, fontFamily: "ArabicBold" },
   diffBox: { marginTop: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
 });

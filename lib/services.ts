@@ -5,6 +5,7 @@ import * as Crypto from "expo-crypto";
 import { numericInput, validAmount, csvCell } from "./validation";
 import { localDate, parseDate, monthRange } from "./dates";
 import { db } from "./db";
+import { exportFinanceBackup, validateFinanceBackup, importFinanceBackup } from "./financeBackup";
 
 export type Category = {
   id: number;
@@ -24,6 +25,7 @@ export type Expense = {
   note: string | null;
   date: string;
   created_at: string;
+  account_id?: number | null;
   category?: Category | null;
 };
 
@@ -122,7 +124,8 @@ export async function getExpenses(filters?: {
   }
   sql += " ORDER BY e.date DESC, e.created_at DESC";
   if (filters?.limit) {
-    sql += ` LIMIT ${filters.limit}`;
+    if(!Number.isSafeInteger(filters.limit)||filters.limit<1)throw Error("حد العمليات غير صالح");
+    sql += " LIMIT ?";params.push(filters.limit);
   }
 
   const rows = await db.getAllAsync<any>(sql, params);
@@ -133,6 +136,7 @@ function mapExpenseRow(row: any): Expense {
   return {
     id: row.id,
     uid: row.uid,
+    account_id: row.account_id,
     amount: row.amount,
     description: row.description,
     category_id: row.category_id,
@@ -158,13 +162,14 @@ export async function createExpense(data: {
   categoryId?: number | null;
   note?: string | null;
   date?: string;
+  accountId?: number;
 }): Promise<Expense> {
   if (!validAmount(data.amount) || !data.description.trim()) throw new Error("أدخل مبلغًا موجبًا ووصفًا صحيحًا");
   const date = data.date ?? localDate();
   parseDate(date);
   const res = await db.runAsync(
-    "INSERT INTO expenses (amount, description, category_id, note, date, uid) VALUES (?, ?, ?, ?, ?, ?)",
-    [data.amount, data.description.trim(), data.categoryId ?? null, data.note ?? null, date, Crypto.randomUUID()]
+    "INSERT INTO expenses (amount, description, category_id, note, date, uid, account_id) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT id FROM accounts WHERE uid='default-cash')))",
+    [data.amount, data.description.trim(), data.categoryId ?? null, data.note ?? null, date, Crypto.randomUUID(), data.accountId ?? null]
   );
   const rows = await db.getAllAsync<any>(
     `SELECT e.*, c.id as cat_id, c.name as cat_name, c.icon as cat_icon, c.color as cat_color, c.budget as cat_budget, c.created_at as cat_created_at
@@ -194,8 +199,10 @@ export async function updateExpense(
     categoryId?: number | null;
     note?: string | null;
     date?: string;
+    accountId?:number;
   }
 ): Promise<void> {
+  if(await db.getFirstAsync("SELECT p.id FROM debt_payments p JOIN expenses e ON p.entry_uid=e.uid WHERE e.id=?",[id])) throw Error("هذه عملية سداد دين؛ عدّلها من صفحة الديون");
   if (data.amount !== undefined && !validAmount(data.amount)) throw new Error("المبلغ غير صالح");
   if (data.description !== undefined && !data.description.trim()) throw new Error("الوصف مطلوب");
   if (data.date !== undefined) parseDate(data.date);
@@ -205,6 +212,7 @@ export async function updateExpense(
     categoryId: "category_id",
     note: "note",
     date: "date",
+    accountId: "account_id",
   };
   const fields: string[] = [];
   const values: (string | number | null)[] = [];
@@ -222,6 +230,7 @@ export async function updateExpense(
 }
 
 export async function deleteExpense(id: number): Promise<void> {
+  if(await db.getFirstAsync("SELECT p.id FROM debt_payments p JOIN expenses e ON p.entry_uid=e.uid WHERE e.id=?",[id])) throw Error("احذف سداد الدين من صفحة الديون للحفاظ على الرصيد");
   await db.runAsync("DELETE FROM expenses WHERE id = ?", [id]);
 }
 
@@ -234,14 +243,20 @@ export type StatsResult = {
 };
 
 export async function getStats(
-  period: "day" | "week" | "month" | "calendarMonth",
-  date?: string
+  period: "day" | "week" | "month" | "calendarMonth" | "custom",
+  date?: string,
+  range?: { start: string; end: string }
 ): Promise<StatsResult> {
   const today = date ?? localDate();
   let startDate: string;
   let endDate: string = today;
 
-  if (period === "calendarMonth") {
+  if (period === "custom") {
+    if (!range) throw Error("اختر فترة صحيحة");
+    parseDate(range.start); parseDate(range.end);
+    if (range.start > range.end) throw Error("بداية الفترة بعد نهايتها");
+    startDate = range.start; endDate = range.end;
+  } else if (period === "calendarMonth") {
     const range = monthRange(today); startDate = range.start; endDate = range.end;
   } else if (period === "day") {
     startDate = today;
@@ -451,11 +466,11 @@ const SENSITIVE_SETTING_KEYS = new Set([
 
 export async function exportBackup(): Promise<string> {
   const cats = await db.getAllAsync<any>("SELECT * FROM categories");
-  const exps = await db.getAllAsync<any>("SELECT * FROM expenses");
+  const exps = await db.getAllAsync<any>("SELECT e.*, COALESCE(e.account_id,(SELECT id FROM accounts WHERE uid='default-cash')) AS account_id FROM expenses e");
   const sets = await db.getAllAsync<any>("SELECT * FROM settings");
   const safeSets = sets.filter((s: any) => !SENSITIVE_SETTING_KEYS.has(s.key));
   return JSON.stringify(
-    { version: 2, exportedAt: new Date().toISOString(), categories: cats, expenses: exps, settings: safeSets },
+    { version: 3, finance: await exportFinanceBackup(), exportedAt: new Date().toISOString(), categories: cats, expenses: exps, settings: safeSets },
     null,
     2
   );
@@ -463,7 +478,8 @@ export async function exportBackup(): Promise<string> {
 
 export async function importBackup(json: string, mode: "merge" | "replace"): Promise<{ categories: number; expenses: number }> {
   const data = JSON.parse(json);
-  if (!data || ![1, 2].includes(data.version) || !Array.isArray(data.expenses) || !Array.isArray(data.categories)) throw new Error("ملف النسخة الاحتياطية غير صالح أو إصداره غير مدعوم");
+  if (!data || ![1, 2, 3].includes(data.version) || !Array.isArray(data.expenses) || !Array.isArray(data.categories)) throw new Error("ملف النسخة الاحتياطية غير صالح أو إصداره غير مدعوم");
+  validateFinanceBackup(data);
   const cats = data.categories as any[], exps = data.expenses as any[];
   const ids = new Set<number>();
   for (const c of cats) {
@@ -477,8 +493,8 @@ export async function importBackup(json: string, mode: "merge" | "replace"): Pro
     if (e.uid != null && (typeof e.uid !== "string" || !e.uid || uids.has(e.uid))) throw new Error("معرّفات المصاريف غير صالحة");
     if (e.uid) uids.add(e.uid);
   }
-  const allowed = new Set(["currency", "theme", "fingerprintEnabled", "aiProvider", "speechProvider", "logoBase64", "monthlyGoal", "notificationsEnabled"]);
-  const enums: Record<string, string[]> = { currency: ["EGP", "USD", "SAR"], theme: ["dark", "light"], fingerprintEnabled: ["true", "false"], notificationsEnabled: ["true", "false"], aiProvider: ["gemini", "openai", "zai"], speechProvider: ["gemini", "openai"] };
+  const allowed = new Set(["currency", "theme", "fingerprintEnabled", "aiProvider", "speechProvider", "logoBase64", "monthlyGoal", "notificationsEnabled", "recurringAuto"]);
+  const enums: Record<string, string[]> = { currency: ["EGP", "USD", "SAR"], theme: ["dark", "light"], fingerprintEnabled: ["true", "false"], notificationsEnabled: ["true", "false"], aiProvider: ["gemini", "openai", "zai"], speechProvider: ["gemini", "openai"], recurringAuto:["true","false"] };
   if (Array.isArray(data.settings)) for (const setting of data.settings) {
     if (!allowed.has(setting.key)) continue;
     if (typeof setting.value !== "string" || (enums[setting.key] && !enums[setting.key].includes(setting.value)) || (setting.key === "monthlyGoal" && setting.value !== "" && !validAmount(Number(setting.value))) || (setting.key === "logoBase64" && setting.value !== "" && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(setting.value))) throw new Error("إعدادات النسخة الاحتياطية غير صالحة");
@@ -493,6 +509,7 @@ export async function importBackup(json: string, mode: "merge" | "replace"): Pro
       const r = await tx.runAsync("INSERT INTO categories (name, icon, color, budget, created_at) VALUES (?, ?, ?, ?, COALESCE(?, datetime('now')))", [c.name, c.icon ?? "tag", c.color ?? "#F0B429", c.budget ?? null, c.created_at ?? null]);
       categoryMap.set(c.id, r.lastInsertRowId); cCount++;
     }
+    const accountMap = await importFinanceBackup(tx, data, categoryMap, mode);
     for (const e of exps) {
       if (!e.uid && mode === "merge") {
         const old = await tx.getFirstAsync<{ id: number }>("SELECT id FROM expenses WHERE amount = ? AND description = ? AND date = ? AND category_id IS ? AND note IS ? AND created_at = ? LIMIT 1", [e.amount, e.description, e.date, e.category_id == null ? null : categoryMap.get(e.category_id)!, e.note ?? null, e.created_at ?? ""]);
@@ -500,9 +517,11 @@ export async function importBackup(json: string, mode: "merge" | "replace"): Pro
       }
       // Legacy v1 files get a deterministic identity from their full original record.
       const uid = e.uid ?? "legacy-" + await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify([e.id,e.amount,e.description,e.category_id,e.note,e.date,e.created_at]));
-      const r = await tx.runAsync("INSERT OR IGNORE INTO expenses (uid, amount, description, category_id, note, date, created_at) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))", [uid, e.amount, e.description, e.category_id == null ? null : categoryMap.get(e.category_id)!, e.note ?? null, e.date, e.created_at ?? null]);
+      const r = await tx.runAsync("INSERT OR IGNORE INTO expenses (uid, amount, description, category_id, note, date, created_at, account_id) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), COALESCE(?, (SELECT id FROM accounts WHERE uid='default-cash')))", [uid, e.amount, e.description, e.category_id == null ? null : categoryMap.get(e.category_id)!, e.note ?? null, e.date, e.created_at ?? null, e.account_id == null ? null : accountMap.get(e.account_id) ?? null]);
       eCount += r.changes;
     }
+    const invalidPayment = await tx.getFirstAsync(`SELECT p.id FROM debt_payments p JOIN debts d ON p.debt_id=d.id LEFT JOIN expenses e ON e.uid=p.entry_uid LEFT JOIN incomes i ON i.uid=p.entry_uid WHERE (d.direction='owing' AND (e.id IS NULL OR e.amount!=p.amount OR e.date!=p.date OR e.account_id!=p.account_id)) OR (d.direction='owed' AND (i.id IS NULL OR i.amount!=p.amount OR i.date!=p.date OR i.account_id!=p.account_id)) LIMIT 1`);
+    if(invalidPayment)throw Error('دمج النسخة يتعارض مع عملية سداد موجودة');
     if (Array.isArray(data.settings)) for (const setting of data.settings) {
       if (allowed.has(setting.key) && typeof setting.value === "string") await tx.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [setting.key, setting.value]);
     }
@@ -535,4 +554,10 @@ export async function getCategoryHint(description: string): Promise<number | nul
     [`%${clean}%`]
   );
   return row?.category_id ?? null;
+}
+
+export async function restoreExpense(e: Expense) {
+  parseDate(e.date);
+  if(!validAmount(e.amount)) throw Error('المبلغ غير صالح');
+  await db.runAsync("INSERT OR IGNORE INTO expenses(uid,amount,description,category_id,note,date,created_at,account_id) VALUES(?,?,?,?,?,?,?,COALESCE(?,(SELECT id FROM accounts WHERE uid='default-cash')))",[e.uid,e.amount,e.description,e.category_id,e.note,e.date,e.created_at,e.account_id??null]);
 }

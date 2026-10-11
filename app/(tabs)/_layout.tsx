@@ -39,16 +39,16 @@ export default function TabLayout() {
             <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.surface }]} />
           ),
         tabBarLabelStyle: {
-          fontFamily: "Inter_500Medium",
+          fontFamily: "ArabicRegular",
           fontSize: 12,
           marginBottom: 2,
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "الرئيسية", tabBarIcon: ({ color, size }) => <Icon name="mic" size={size} color={color} /> }} />
+      <Tabs.Screen name="index" options={{ title: "الرئيسية", tabBarIcon: ({ color, size }) => <Icon name="home" size={size} color={color} /> }} />
       <Tabs.Screen name="stats" options={{ title: "الإحصائيات", tabBarIcon: ({ color, size }) => <Icon name="bar-chart-2" size={size} color={color} /> }} />
       <Tabs.Screen name="expenses" options={{ title: "المصاريف", tabBarIcon: ({ color, size }) => <Icon name="list" size={size} color={color} /> }} />
-      <Tabs.Screen name="admin" options={{ title: "الإدارة", tabBarIcon: ({ color, size }) => <Icon name="settings" size={size} color={color} /> }} />
+      <Tabs.Screen name="admin" options={{ title: "الإعدادات", tabBarIcon: ({ color, size }) => <Icon name="settings" size={size} color={color} /> }} />
     </Tabs>
   );
 }

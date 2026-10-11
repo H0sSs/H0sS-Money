@@ -1,7 +1,7 @@
 name: Validate and build release APK
 on:
   push:
-    branches: [main, master, fix/release-redesign]
+    branches: [main, master, fix/release-redesign, feat/1.2-complete]
     paths-ignore: ['docs/**', 'scripts/**', '.github/workflows/**']
   pull_request:
   workflow_dispatch:
@@ -52,12 +52,25 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('package-lock.json', 'app.json') }}
-          restore-keys: gradle-${{ runner.os }}-
+          key: gradle-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('package-lock.json') }}-
+            gradle-${{ runner.os }}-${{ matrix.variant }}-
       - run: npm ci --legacy-peer-deps
       - run: npx expo prebuild --platform android --clean --no-install
         env:
           CI: 'true'
+      - name: Restore native compilation outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            android/.gradle
+            android/app/.cxx
+            android/app/build
+            node_modules/**/android/.cxx
+            node_modules/**/android/build
+          key: native-v1-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: native-v1-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('package-lock.json') }}-
       - name: Build optimized APK
         shell: bash
         run: |
@@ -68,15 +81,18 @@ jobs:
           else
             ARCHS='armeabi-v7a,arm64-v8a,x86,x86_64'
           fi
+          echo "Native build started at $(date -u +%FT%TZ)"
+          BUILD_STARTED=$SECONDS
           cd android
-          ./gradlew assembleRelease -PreactNativeArchitectures="$ARCHS" --no-daemon --stacktrace 2>&1 | tee build.log
+          ./gradlew assembleRelease -PreactNativeArchitectures="$ARCHS" --build-cache --no-daemon --stacktrace 2>&1 | tee build.log
+          echo "Native build seconds: $((SECONDS-BUILD_STARTED))" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify APK and signing certificate
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p output
-          cp android/app/build/outputs/apk/release/app-release.apk output/H0sS-Money-1.1.0-${{ matrix.variant }}.apk
-          APK=output/H0sS-Money-1.1.0-${{ matrix.variant }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk output/H0sS-Money-1.2.0-${{ matrix.variant }}.apk
+          APK=output/H0sS-Money-1.2.0-${{ matrix.variant }}.apk
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" > output/signature.txt
           "$BUILD_TOOLS/aapt" dump badging "$APK" > output/package.txt

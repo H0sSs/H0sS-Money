@@ -1,3 +1,5 @@
+import BackupStatus from "@/components/BackupStatus";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import * as LocalAuthentication from "expo-local-authentication";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import PageHeader from "@/components/PageHeader";
@@ -10,7 +12,7 @@ import {
   Alert, ActivityIndicator, Switch, Platform, Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import Icon from "@/components/Icon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
@@ -183,13 +185,13 @@ function ExpenseModal({ visible, expense, categories, colors, saving, onClose, o
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
               <Pressable onPress={() => setCategoryId(null)}
                 style={[s.catChip, { backgroundColor: categoryId === null ? colors.primary + "25" : colors.surfaceAlt, borderColor: categoryId === null ? colors.primary : colors.border }]}>
-                <Text style={{ color: categoryId === null ? colors.primary : colors.textSecondary, fontSize: 13, fontFamily: "Inter_500Medium" }}>بدون</Text>
+                <Text style={{ color: categoryId === null ? colors.primary : colors.textSecondary, fontSize: 13, fontFamily: "ArabicRegular" }}>بدون</Text>
               </Pressable>
               {categories.map((c) => (
                 <Pressable key={c.id} onPress={() => setCategoryId(c.id)}
                   style={[s.catChip, { backgroundColor: categoryId === c.id ? c.color + "25" : colors.surfaceAlt, borderColor: categoryId === c.id ? c.color : colors.border }]}>
                   <Icon name={c.icon} size={14} color={categoryId === c.id ? c.color : colors.textSecondary} />
-                  <Text style={{ color: categoryId === c.id ? c.color : colors.textSecondary, fontSize: 13, fontFamily: "Inter_500Medium", marginLeft: 4 }}>{c.name}</Text>
+                  <Text style={{ color: categoryId === c.id ? c.color : colors.textSecondary, fontSize: 13, fontFamily: "ArabicRegular", marginLeft: 4 }}>{c.name}</Text>
                 </Pressable>
               ))}
             </ScrollView>
@@ -231,12 +233,14 @@ function SettingRow({ label, children, colors, last }: { label: string; children
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = React.useContext(BottomTabBarHeightContext) ?? insets.bottom;
   const { colors, isDark, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
 
   const [googleClientId, setGoogleClientId] = useState("");
-  const [panel, setPanel] = useState<"all" | "money" | "ai" | "settings" | "backup">("all");
+  const router = useRouter();
+  const params = useLocalSearchParams<{panel?:string}>();
+  const [panel] = useState<'home'|'all'|'money'|'ai'|'settings'|'backup'>(()=>['money','ai','settings','backup'].includes(params.panel??'')?params.panel as 'money'|'ai'|'settings'|'backup':'home');
   const [catModal, setCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [expModal, setExpModal] = useState(false);
@@ -323,6 +327,8 @@ export default function AdminScreen() {
       const stamp = localDate();
       const path = FileSystem.cacheDirectory + `hossmoney-backup-${stamp}.json`;
       await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
+      await updateSetting("localLastBackupAt",String(Date.now()));
+      await queryClient.invalidateQueries({queryKey:["backup-status"]});
       const can = await Sharing.isAvailableAsync();
       if (can) {
         await Sharing.shareAsync(path, { mimeType: "application/json", dialogTitle: "نسخة احتياطية H0sS-Money" });
@@ -490,48 +496,20 @@ export default function AdminScreen() {
   };
   const aiProvider = settings?.aiProvider ?? "openai";
   const logoUri = settings?.logoBase64 || settings?.logoUri || null;
+  if(panel==='home')return <View style={[s.container,{backgroundColor:colors.background,paddingTop:insets.top}]}><ScrollView contentContainerStyle={{paddingBottom:tabBarHeight+20}}><PageHeader title="الإعدادات" subtitle="اختر القسم الذي تريد إدارته" icon="settings"/>
+   {[{title:'الأموال',rows:[['الحسابات والأرصدة','accounts','credit-card'],['الدخل','income','trending-up'],['الديون والسداد','debts','users'],['المصاريف المتكررة','recurring','repeat']]},{title:'التطبيق',rows:[['الميزانيات والفئات','money','tag'],['الذكاء الاصطناعي','ai','cpu'],['النسخ والبيانات','backup','database'],['المظهر والأمان','settings','shield']]}].map(group=><View key={group.title} style={{paddingHorizontal:16,marginBottom:16}}><Text style={{color:colors.textSecondary,fontFamily:'ArabicBold',textAlign:'right',marginBottom:10}}>{group.title}</Text><View style={{borderRadius:18,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border}}>{group.rows.map(([label,id,icon],i)=><Pressable key={id} onPress={()=>router.push({pathname:['accounts','income','debts','recurring'].includes(id)?'/finance':'/settings',params:['accounts','income','debts','recurring'].includes(id)?{section:id}:{panel:id}})} style={{flexDirection:'row',alignItems:'center',gap:12,padding:16,borderTopWidth:i?1:0,borderColor:colors.border}}><Icon name="chevron-left" size={18} color={colors.textSecondary}/><Text style={{flex:1,textAlign:'right',color:colors.text,fontFamily:'ArabicBold'}}>{label}</Text><Icon name={icon} size={20} color={colors.primary}/></Pressable>)}</View></View>)}
+   <Text style={{color:colors.textSecondary,textAlign:'center',fontFamily:'ArabicRegular',fontSize:12}}>H0sS-Money 1.2.0 · بياناتك محفوظة محليًا</Text>
+  </ScrollView></View>;
+
 
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }} showsVerticalScrollIndicator={false}>
-        <PageHeader title="إدارة محفظتك" subtitle="مصاريفك، تفضيلاتك، ونسخك الاحتياطية في مكان واحد" icon="settings" />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 12 }}>{([{ id: "all", title: "الكل" }, { id: "money", title: "المصاريف والفئات" }, { id: "ai", title: "الذكاء الاصطناعي" }, { id: "settings", title: "التفضيلات" }, { id: "backup", title: "النسخ والبيانات" }] as const).map(item => <Pressable key={item.id} onPress={() => setPanel(item.id)} style={{ paddingHorizontal: 15, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: panel === item.id ? colors.primary : colors.border, backgroundColor: panel === item.id ? colors.primary + "18" : colors.surface }}><Text style={{ color: panel === item.id ? colors.primary : colors.textSecondary, fontWeight: "700", fontSize: 12 }}>{item.title}</Text></Pressable>)}</ScrollView>
-        {(panel === "all" || panel === "money") && <>
-        {/* Dashboard Totals */}
-        <Text style={[s.sec, { color: colors.primary }]}>الإجمالي</Text>
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={s.statsRow}>
-            <View style={[s.statBox, { borderColor: colors.border }]}>
-              <Text style={[s.statVal, { color: colors.primary }]}>
-                {monthStats?.total != null ? Number(monthStats.total).toFixed(0) : "—"}
-              </Text>
-              <Text style={[s.statLbl, { color: colors.textSecondary }]}>{currency} / هذا الشهر</Text>
-            </View>
-            <View style={[s.statBox, { borderColor: colors.border, borderLeftWidth: 1 }]}>
-              <Text style={[s.statVal, { color: colors.text }]}>
-                {monthStats?.count ?? "—"}
-              </Text>
-              <Text style={[s.statLbl, { color: colors.textSecondary }]}>عملية / الشهر</Text>
-            </View>
-          </View>
-          {monthStats && monthStats.byCategory.length > 0 && (
-            <View style={{ marginTop: 12 }}>
-              <Text style={[s.label, { color: colors.textSecondary, marginBottom: 8 }]}>أعلى الفئات هذا الشهر</Text>
-              {monthStats.byCategory.slice(0, 3).map((bc, i) => (
-                <View key={i} style={[s.catStatRow, i < 2 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-                  <View style={[s.catDot, { backgroundColor: bc.color }]} />
-                  <Text style={[s.catStatName, { color: colors.text }]}>{bc.name}</Text>
-                  <Text style={[s.catStatAmt, { color: colors.primary }]}>{Number(bc.total).toFixed(0)} {currency}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
+        <PageHeader title={panel==='money'?'الميزانيات والفئات':panel==='ai'?'الذكاء الاصطناعي':panel==='backup'?'النسخ والبيانات':'المظهر والأمان'} subtitle="إعدادات واضحة، وكل تغيير محفوظ على جهازك" icon="settings" actions={<Pressable accessibilityLabel="رجوع للإعدادات" onPress={()=>router.back()} style={{padding:12}}><Icon name="arrow-left" size={22} color={colors.text}/></Pressable>} />
 
-        </>}
         {(panel === "all" || panel === "settings") && <>
         {/* Logo */}
-        <Text style={[s.sec, { color: colors.primary }]}>شعار التطبيق</Text>
+        <Text style={[s.sec, { color: colors.primary }]}>شعارك داخل التطبيق</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border, alignItems: "center" }]}>
           {logoUri ? (
             <Image source={{ uri: logoUri }} style={s.logoPreview} resizeMode="contain" />
@@ -544,13 +522,13 @@ export default function AdminScreen() {
           <Pressable style={[s.logoBtn, { backgroundColor: colors.primary + "20", borderColor: colors.primary }]}
             onPress={handlePickLogo}>
             <Icon name="upload" size={16} color={colors.primary} />
-            <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 14, marginLeft: 6 }}>
+            <Text style={{ color: colors.primary, fontFamily: "ArabicBold", fontSize: 14, marginLeft: 6 }}>
               {logoUri ? "تغيير الشعار" : "رفع شعار"}
             </Text>
           </Pressable>
           {logoUri && (
             <Pressable onPress={async () => { await setSetting("logoBase64", ""); await setSetting("logoUri", ""); }} style={{ marginTop: 8 }}>
-              <Text style={{ color: colors.error, fontSize: 12, fontFamily: "Inter_400Regular" }}>إزالة الشعار</Text>
+              <Text style={{ color: colors.error, fontSize: 12, fontFamily: "ArabicRegular" }}>إزالة الشعار</Text>
             </Pressable>
           )}
         </View>
@@ -588,7 +566,7 @@ export default function AdminScreen() {
               {["EGP", "USD", "SAR"].map((c) => (
                 <Pressable key={c} onPress={() => setSetting("currency", c)}
                   style={[s.currBtn, { backgroundColor: currency === c ? colors.primary : colors.surfaceAlt, borderColor: currency === c ? colors.primary : colors.border }]}>
-                  <Text style={{ color: currency === c ? colors.background : colors.textSecondary, fontSize: 12, fontFamily: "Inter_600SemiBold" }}>{c}</Text>
+                  <Text style={{ color: currency === c ? colors.background : colors.textSecondary, fontSize: 12, fontFamily: "ArabicBold" }}>{c}</Text>
                 </Pressable>
               ))}
             </View>
@@ -613,11 +591,11 @@ export default function AdminScreen() {
               placeholderTextColor={colors.textSecondary}
             />
             <Pressable style={[s.keyBtn, { backgroundColor: colors.primary, paddingHorizontal: 18, marginBottom: 0 }]} onPress={handleSaveGoal}>
-              <Text style={{ color: colors.buttonText, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>حفظ</Text>
+              <Text style={{ color: colors.buttonText, fontFamily: "ArabicBold", fontSize: 13 }}>حفظ</Text>
             </Pressable>
           </View>
           {settings?.monthlyGoal != null && (
-            <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 10, fontFamily: "Inter_400Regular" }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 10, fontFamily: "ArabicRegular" }}>
               ✓ الحلقة المتحركة تظهر في الشاشة الرئيسية
             </Text>
           )}
@@ -632,7 +610,7 @@ export default function AdminScreen() {
             آخر التنبيهات اللي وصلت لك ({notifLog.length})
           </Text>
           {notifLog.length === 0 ? (
-            <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "ArabicRegular", textAlign: "center", paddingVertical: 8 }}>
               لا توجد تنبيهات بعد
             </Text>
           ) : (
@@ -654,7 +632,7 @@ export default function AdminScreen() {
                   onPress={() => { refetchLog(); setLogModal(true); }}
                 >
                   <Icon name="list" size={14} color={colors.text} />
-                  <Text style={{ color: colors.text, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>عرض الكل</Text>
+                  <Text style={{ color: colors.text, fontFamily: "ArabicBold", fontSize: 12 }}>عرض الكل</Text>
                 </Pressable>
                 <Pressable
                   style={[s.keyBtn, { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.error, paddingHorizontal: 14, marginBottom: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }]}
@@ -675,17 +653,18 @@ export default function AdminScreen() {
 
         </>}
         {(panel === "all" || panel === "backup") && <>
+        <BackupStatus/>
         {/* Google Drive Backup */}
         <Text style={[s.sec, { color: colors.primary }]}>نسخ Google Drive</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {!settings?.driveAccessToken ? (
             <>
-              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 8, lineHeight: 18 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 8, lineHeight: 18 }}>
                 اربط Google Drive لحفظ نسخة احتياطية يدويًا. أدخل Web Client ID، وأنشئ عميل Android باسم الحزمة وبصمة SHA-1 الموجودة مع ملفات البناء.
               </Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 8, fontFamily: "Inter_400Regular" }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 8, fontFamily: "ArabicRegular" }}>
                 إعداد Android في Google Cloud:{"\n"}
-                <Text style={{ color: colors.primary, fontFamily: "Inter_500Medium" }}>{getDriveRedirectUri()}</Text>
+                <Text style={{ color: colors.primary, fontFamily: "ArabicRegular" }}>{getDriveRedirectUri()}</Text>
               </Text>
               <TextInput
                 style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text, marginBottom: 10 }]}
@@ -712,19 +691,19 @@ export default function AdminScreen() {
                 }}
               >
                 <Icon name="link" size={15} color={colors.background} />
-                <Text style={{ color: colors.buttonText, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>ربط Google Drive</Text>
+                <Text style={{ color: colors.buttonText, fontFamily: "ArabicBold", fontSize: 13 }}>ربط Google Drive</Text>
               </Pressable>
             </>
           ) : (
             <>
               <View style={{ marginBottom: 12 }}>
-                <Text style={{ color: colors.text, fontSize: 14, fontFamily: "Inter_600SemiBold" }}>متصل ✓</Text>
+                <Text style={{ color: colors.text, fontSize: 14, fontFamily: "ArabicBold" }}>متصل ✓</Text>
                 {settings.driveLastBackupAt && (
-                  <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, fontFamily: "Inter_400Regular" }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, fontFamily: "ArabicRegular" }}>
                     آخر نسخة: {new Date(Number(settings.driveLastBackupAt)).toLocaleString("ar-EG")}
                   </Text>
                 )}
-                <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, fontFamily: "Inter_400Regular" }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, fontFamily: "ArabicRegular" }}>
                   النسخ يدوي فقط — اضغط "ارفع الآن" متى أردت
                 </Text>
               </View>
@@ -738,14 +717,14 @@ export default function AdminScreen() {
                   }}
                 >
                   <Icon name="upload-cloud" size={14} color={colors.background} />
-                  <Text style={{ color: colors.buttonText, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>ارفع الآن</Text>
+                  <Text style={{ color: colors.buttonText, fontFamily: "ArabicBold", fontSize: 12 }}>ارفع الآن</Text>
                 </Pressable>
                 <Pressable
                   style={[s.keyBtn, { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, flex: 1, marginBottom: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6 }]}
                   onPress={openDriveRestore}
                 >
                   <Icon name="download-cloud" size={14} color={colors.text} />
-                  <Text style={{ color: colors.text, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>استرجع نسخة</Text>
+                  <Text style={{ color: colors.text, fontFamily: "ArabicBold", fontSize: 12 }}>استرجع نسخة</Text>
                 </Pressable>
                 <Pressable
                   style={[s.keyBtn, { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.error, paddingHorizontal: 12, marginBottom: 0, alignItems: "center", justifyContent: "center" }]}
@@ -780,7 +759,7 @@ export default function AdminScreen() {
               ) : (
                 <>
                   <Icon name="download" size={15} color={colors.background} />
-                  <Text style={{ color: colors.buttonText, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>تصدير نسخة</Text>
+                  <Text style={{ color: colors.buttonText, fontFamily: "ArabicBold", fontSize: 13 }}>تصدير نسخة</Text>
                 </>
               )}
             </Pressable>
@@ -794,55 +773,11 @@ export default function AdminScreen() {
               ) : (
                 <>
                   <Icon name="upload" size={15} color={colors.primary} />
-                  <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>استيراد</Text>
+                  <Text style={{ color: colors.primary, fontFamily: "ArabicBold", fontSize: 13 }}>استيراد</Text>
                 </>
               )}
             </Pressable>
           </View>
-        </View>
-
-        </>}
-        {(panel === "all" || panel === "money") && <>
-        {/* Manual Expenses */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 16, marginTop: 8, marginBottom: 8 }}>
-          <Text style={[s.sec, { marginHorizontal: 0, marginTop: 0, color: colors.primary }]}>إضافة مصروف يدوياً</Text>
-          <Pressable onPress={() => { setEditingExp(null); setExpModal(true); }}
-            style={[s.addBtn, { backgroundColor: colors.primary + "20", borderColor: colors.primary }]}>
-            <Icon name="plus" size={15} color={colors.primary} />
-            <Text style={{ color: colors.primary, fontSize: 13, fontFamily: "Inter_600SemiBold" }}>إضافة</Text>
-          </Pressable>
-        </View>
-
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          {recentExpenses.length === 0 ? (
-            <Text style={[s.emptyText, { color: colors.textSecondary }]}>لا توجد مصاريف حديثة</Text>
-          ) : (
-            recentExpenses.map((exp, idx) => {
-              const cat = categories.find((c) => c.id === exp.category_id);
-              return (
-                <View key={exp.id}
-                  style={[s.expRow, idx < recentExpenses.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-                  <View style={[s.catIcon, { backgroundColor: (cat?.color ?? "#9CA3AF") + "20" }]}>
-                    <Icon name={cat?.icon ?? "tag"} size={16} color={cat?.color ?? "#9CA3AF"} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.expDesc, { color: colors.text }]} numberOfLines={1}>{exp.description}</Text>
-                    <Text style={[s.expDate, { color: colors.textSecondary }]}>{exp.date}</Text>
-                  </View>
-                  <Text style={[s.expAmt, { color: colors.primary }]}>{Number(exp.amount).toFixed(0)} {currency}</Text>
-                  <Pressable onPress={() => { setEditingExp(exp); setExpModal(true); }} hitSlop={10} style={{ marginLeft: 10 }}>
-                    <Icon name="edit-2" size={15} color={colors.textSecondary} />
-                  </Pressable>
-                  <Pressable onPress={() => Alert.alert("حذف", `حذف "${exp.description}"؟`, [
-                    { text: "إلغاء", style: "cancel" },
-                    { text: "حذف", style: "destructive", onPress: () => deleteExpMutation.mutate(exp.id) },
-                  ])} hitSlop={10} style={{ marginLeft: 10 }}>
-                    <Icon name="trash-2" size={15} color={colors.error} />
-                  </Pressable>
-                </View>
-              );
-            })
-          )}
         </View>
 
         </>}
@@ -853,7 +788,7 @@ export default function AdminScreen() {
           <Pressable onPress={() => { setEditingCat(null); setCatModal(true); }}
             style={[s.addBtn, { backgroundColor: colors.primary + "20", borderColor: colors.primary }]}>
             <Icon name="plus" size={15} color={colors.primary} />
-            <Text style={{ color: colors.primary, fontSize: 13, fontFamily: "Inter_600SemiBold" }}>إضافة</Text>
+            <Text style={{ color: colors.primary, fontSize: 13, fontFamily: "ArabicBold" }}>إضافة</Text>
           </Pressable>
         </View>
 
@@ -915,7 +850,7 @@ export default function AdminScreen() {
             {driveLoading ? (
               <ActivityIndicator color={colors.primary} style={{ marginVertical: 30 }} />
             ) : driveFiles.length === 0 ? (
-              <Text style={{ color: colors.textSecondary, textAlign: "center", paddingVertical: 20, fontFamily: "Inter_400Regular" }}>
+              <Text style={{ color: colors.textSecondary, textAlign: "center", paddingVertical: 20, fontFamily: "ArabicRegular" }}>
                 لا توجد نسخ احتياطية على Drive
               </Text>
             ) : (
@@ -923,8 +858,8 @@ export default function AdminScreen() {
                 {driveFiles.map((f) => (
                   <View key={f.id} style={[s.driveRow, { borderBottomColor: colors.border }]}>
                     <Pressable onPress={() => askRestoreMode(f)} style={{ flex: 1 }}>
-                      <Text style={{ color: colors.text, fontSize: 13, fontFamily: "Inter_600SemiBold" }} numberOfLines={1}>{f.name}</Text>
-                      <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 3, fontFamily: "Inter_400Regular" }}>
+                      <Text style={{ color: colors.text, fontSize: 13, fontFamily: "ArabicBold" }} numberOfLines={1}>{f.name}</Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 3, fontFamily: "ArabicRegular" }}>
                         {new Date(f.createdTime).toLocaleString("ar-EG")}
                         {f.size ? ` • ${Math.round(Number(f.size) / 1024)} KB` : ""}
                       </Text>
@@ -953,16 +888,16 @@ export default function AdminScreen() {
             <View style={[s.handle, { backgroundColor: colors.border }]} />
             <Text style={[s.sheetTitle, { color: colors.text }]}>سجل التنبيهات ({notifLog.length})</Text>
             {notifLog.length === 0 ? (
-              <Text style={{ color: colors.textSecondary, textAlign: "center", paddingVertical: 20, fontFamily: "Inter_400Regular" }}>
+              <Text style={{ color: colors.textSecondary, textAlign: "center", paddingVertical: 20, fontFamily: "ArabicRegular" }}>
                 لا توجد تنبيهات
               </Text>
             ) : (
               <ScrollView style={{ maxHeight: 480 }}>
                 {notifLog.map((n) => (
                   <View key={n.id} style={[s.logFullRow, { borderBottomColor: colors.border }]}>
-                    <Text style={{ color: colors.text, fontSize: 13, fontFamily: "Inter_600SemiBold" }}>{n.title}</Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4, fontFamily: "Inter_400Regular" }}>{n.body}</Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 10, marginTop: 6, fontFamily: "Inter_400Regular" }}>
+                    <Text style={{ color: colors.text, fontSize: 13, fontFamily: "ArabicBold" }}>{n.title}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4, fontFamily: "ArabicRegular" }}>{n.body}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 10, marginTop: 6, fontFamily: "ArabicRegular" }}>
                       {new Date(n.created_at + "Z").toLocaleString("ar-EG")}
                     </Text>
                   </View>
@@ -985,22 +920,22 @@ export default function AdminScreen() {
 const s = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
-  title: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  sec: { fontSize: 15, fontFamily: "Inter_700Bold", textAlign: "right", marginHorizontal: 20, marginTop: 22, marginBottom: 12 },
+  title: { fontSize: 22, fontFamily: "ArabicBold" },
+  sec: { fontSize: 15, fontFamily: "ArabicBold", textAlign: "right", marginHorizontal: 20, marginTop: 22, marginBottom: 12 },
   card: { marginHorizontal: 16, borderRadius: 22, borderWidth: 1, padding: 20, marginBottom: 4 },
-  cardLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 2 },
-  label: { fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 6 },
+  cardLabel: { fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 2 },
+  label: { fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 6 },
   keyRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  keyInput: { flex: 1, borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, fontFamily: "Inter_400Regular" },
+  keyInput: { flex: 1, borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, fontFamily: "ArabicRegular" },
   keyBtn: { borderRadius: 12, padding: 12, alignItems: "center", marginBottom: 4 },
   provBtn: { flex: 1, borderRadius: 12, borderWidth: 1, padding: 12, alignItems: "center" },
   settingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14 },
-  settingLabel: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  settingLabel: { fontSize: 14, fontFamily: "ArabicRegular" },
   currBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6 },
   catRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 12 },
   catIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  catName: { fontSize: 14, fontFamily: "Inter_500Medium" },
-  catBudget: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  catName: { fontSize: 14, fontFamily: "ArabicRegular" },
+  catBudget: { fontSize: 11, fontFamily: "ArabicRegular", marginTop: 2 },
   addBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
   colorGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 10 },
   colorDot: { width: 28, height: 28, borderRadius: 14 },
@@ -1009,35 +944,35 @@ const s = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 40 },
   handle: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 },
-  sheetTitle: { fontSize: 18, fontFamily: "Inter_700Bold", textAlign: "center", marginBottom: 12 },
-  input: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, fontFamily: "Inter_400Regular", marginBottom: 4, textAlign: "right" },
+  sheetTitle: { fontSize: 18, fontFamily: "ArabicBold", textAlign: "center", marginBottom: 12 },
+  input: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, fontFamily: "ArabicRegular", marginBottom: 4, textAlign: "right" },
   actions: { flexDirection: "row", gap: 12, marginTop: 12 },
   cancelBtn: { flex: 1, borderWidth: 1, borderRadius: 14, padding: 14, alignItems: "center" },
-  cancelText: { fontSize: 15, fontFamily: "Inter_500Medium" },
+  cancelText: { fontSize: 15, fontFamily: "ArabicRegular" },
   saveBtn: { flex: 2, borderRadius: 14, padding: 14, alignItems: "center" },
-  saveText: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  saveText: { fontSize: 15, fontFamily: "ArabicBold" },
   statsRow: { flexDirection: "row" },
   statBox: { flex: 1, alignItems: "center", paddingVertical: 8 },
-  statVal: { fontSize: 26, fontFamily: "Inter_700Bold" },
-  statLbl: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  statVal: { fontSize: 26, fontFamily: "ArabicBold" },
+  statLbl: { fontSize: 11, fontFamily: "ArabicRegular", marginTop: 2 },
   catStatRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, gap: 8 },
   catDot: { width: 10, height: 10, borderRadius: 5 },
-  catStatName: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
-  catStatAmt: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  catStatName: { flex: 1, fontSize: 13, fontFamily: "ArabicRegular" },
+  catStatAmt: { fontSize: 13, fontFamily: "ArabicBold" },
   logoPreview: { width: 100, height: 100, borderRadius: 20, marginBottom: 12 },
   logoPlaceholder: { width: 100, height: 100, borderRadius: 20, borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  logoPlaceholderText: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 6 },
+  logoPlaceholderText: { fontSize: 11, fontFamily: "ArabicRegular", marginTop: 6 },
   logoBtn: { flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10 },
   expRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 10 },
-  expDesc: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  expDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  expAmt: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 16 },
+  expDesc: { fontSize: 13, fontFamily: "ArabicRegular" },
+  expDate: { fontSize: 11, fontFamily: "ArabicRegular", marginTop: 2 },
+  expAmt: { fontSize: 14, fontFamily: "ArabicBold" },
+  emptyText: { fontSize: 13, fontFamily: "ArabicRegular", textAlign: "center", paddingVertical: 16 },
   catChip: { flexDirection: "row", alignItems: "center", borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 },
   logRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 10 },
-  logTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  logBody: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  logDate: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  logTitle: { fontSize: 12, fontFamily: "ArabicBold" },
+  logBody: { fontSize: 11, fontFamily: "ArabicRegular", marginTop: 2 },
+  logDate: { fontSize: 10, fontFamily: "ArabicRegular" },
   logFullRow: { paddingVertical: 12, borderBottomWidth: 1 },
   driveRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, gap: 8 },
 });

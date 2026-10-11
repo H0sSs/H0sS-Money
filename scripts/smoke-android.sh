@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p smoke
-adb install -r output/H0sS-Money-1.1.0-universal.apk
+adb install -r output/H0sS-Money-1.2.0-universal.apk
 adb logcat -c
 adb shell am start -W -n com.hossmoney.app/.MainActivity
 STATUS=0

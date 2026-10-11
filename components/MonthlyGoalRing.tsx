@@ -80,14 +80,14 @@ export default function MonthlyGoalRing({ used, goal, currency, colors }: Props)
         </Svg>
         <View style={styles.center} pointerEvents="none">
           <Text style={[styles.pct, { color: ringColor }]}>{Math.round(pct * 100)}%</Text>
-          <Text style={[styles.used, { color: colors.text }]}>{used.toFixed(0)}</Text>
-          <Text style={[styles.of, { color: colors.textSecondary }]}>من {goal.toFixed(0)} {currency}</Text>
+          <Text style={[styles.used, { color: colors.text }]}>{used.toFixed(2)}</Text>
+          <Text style={[styles.of, { color: colors.textSecondary }]}>من {goal.toFixed(2)} {currency}</Text>
         </View>
       </View>
       <Text style={[styles.footer, { color: over ? colors.error : colors.textSecondary }]}>
         {over
-          ? `⚠️ تجاوزت الهدف بـ ${(used - goal).toFixed(0)} ${currency}`
-          : `متبقي ${remaining.toFixed(0)} ${currency} هذا الشهر`}
+          ? `⚠️ تجاوزت الهدف بـ ${(used - goal).toFixed(2)} ${currency}`
+          : `متبقي ${remaining.toFixed(2)} ${currency} هذا الشهر`}
       </Text>
     </View>
   );
@@ -102,11 +102,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
   },
-  title: { fontSize: 13, fontFamily: "Inter_500Medium", marginBottom: 12 },
+  title: { fontSize: 13, fontFamily: "ArabicRegular", marginBottom: 12 },
   ringWrap: { width: SIZE, height: SIZE, alignItems: "center", justifyContent: "center" },
   center: { position: "absolute", alignItems: "center", justifyContent: "center" },
-  pct: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  used: { fontSize: 18, fontFamily: "Inter_600SemiBold", marginTop: 2 },
-  of: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  footer: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 14, textAlign: "center" },
+  pct: { fontSize: 22, fontFamily: "ArabicBold" },
+  used: { fontSize: 18, fontFamily: "ArabicBold", marginTop: 2 },
+  of: { fontSize: 11, fontFamily: "ArabicRegular", marginTop: 2 },
+  footer: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 14, textAlign: "center" },
 });

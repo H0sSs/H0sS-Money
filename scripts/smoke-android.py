@@ -14,12 +14,27 @@ def tap(label, optional=False):
         values=[node.get('text',''),node.get('content-desc','')]
         if any(value==label or value.startswith(label+',') for value in values):
             coords=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
-            if len(coords)==4:
+            if len(coords)==4 and coords[2]>coords[0] and coords[3]>coords[1]:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
                 time.sleep(2)
                 return True
     if optional:return False
     raise RuntimeError(f'UI control not found: {label}')
+
+def tap_scroll(label):
+    for _ in range(5):
+        if tap(label,optional=True):return
+        scroll_body()
+    raise RuntimeError(f'Control not reachable after scrolling: {label}')
+
+def fill_field(label,value):
+    for node in nodes():
+        if node.get('class')=='android.widget.EditText' and node.get('content-desc')==label:
+            coords=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
+            adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
+            time.sleep(1);adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
+            return
+    raise RuntimeError(f'Input not found: {label}')
 
 def screenshot(name):
     adb('shell','screencap','-p',f'/sdcard/{name}.png')
@@ -37,7 +52,9 @@ def scroll_body(down=True):
 
 adb('shell','settings','put','secure','show_ime_with_hard_keyboard','1')
 time.sleep(12)
+tap('تخطي',optional=True)
 tap('مش دلوقتي',optional=True)
+tap('تخطي',optional=True)
 assert any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()), 'Home not ready'
 screenshot('home')
 # On short screens the manual action starts below the fixed tab bar.
@@ -62,18 +79,35 @@ for index,value in enumerate(['12.50','QA_coffee']):
     assert entered[index].get('text')==value, f'Incorrect field input: {entered[index].get("text")}'
 time.sleep(1)
 screenshot('expense-form')
-tap('حفظ')
+tap_scroll('حفظ')
 time.sleep(3)
 scroll_body(down=False)
 assert any('12.50' in n.get('text','') for n in nodes()), 'Home total did not update'
 screenshot('home-with-expense')
-for label,name in [('الإحصائيات','stats'),('المصاريف','expenses'),('الإدارة','admin')]:
+for label,name in [('الإحصائيات','stats'),('المصاريف','expenses'),('الإعدادات','admin')]:
     tap(label)
     screenshot(name)
-tap('التفضيلات')
+    if name=='stats':
+        scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison')
+for label,name in [('الحسابات والأرصدة','accounts'),('الدخل','income'),('الديون والسداد','debts'),('المصاريف المتكررة','recurring')]:
+    tap(label)
+    screenshot(name)
+    if name=='income':
+        tap('إضافة دخل')
+        fill_field('الوصف','QA_salary')
+        fill_field('المبلغ','100')
+        tap_scroll('حفظ')
+        assert any('QA_salary' in n.get('text','') for n in nodes()),'Income not saved'
+        screenshot('income-saved')
+    tap('رجوع')
+tap_scroll('المظهر والأمان')
 screenshot('settings')
 # First switch in preferences is the theme toggle.
 switches=[n for n in nodes() if n.get('class')=='android.widget.Switch']
+for _ in range(4):
+    if switches:break
+    scroll_body()
+    switches=[n for n in nodes() if n.get('class')=='android.widget.Switch']
 if switches:
     coords=list(map(int,re.findall(r'\d+',switches[0].get('bounds',''))))
     adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))

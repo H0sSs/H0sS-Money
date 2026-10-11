@@ -65,8 +65,8 @@ const s = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center" },
   inner: { alignItems: "center", gap: 16 },
   iconCircle: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", marginTop: 8 },
-  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", textAlign: "center", maxWidth: 240 },
+  title: { fontSize: 28, fontFamily: "ArabicBold", marginTop: 8 },
+  subtitle: { fontSize: 15, fontFamily: "ArabicRegular", textAlign: "center", maxWidth: 240 },
   btn: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 20, marginTop: 16 },
-  btnText: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  btnText: { fontSize: 17, fontFamily: "ArabicBold" },
 });

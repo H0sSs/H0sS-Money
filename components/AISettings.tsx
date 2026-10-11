@@ -12,16 +12,17 @@ const PROVIDERS: { id: AIProvider; label: string; subtitle: string }[] = [
 ];
 function KeyRow({ provider }: { provider: typeof PROVIDERS[number] }) {
   const { colors: c } = useTheme();
-  const [key, setKey] = useState(""); const [show, setShow] = useState(false); const [busy, setBusy] = useState<string | null>(null);
+  const [key, setKey] = useState(""); const [show, setShow] = useState(false); const [status,setStatus]=useState<string|null>(null); const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => { getAPIKey(provider.id).then(value => setKey(value ?? "")).catch(() => {}); }, [provider.id]);
   async function run(test: boolean) {
     setBusy(test ? "test" : "save");
-    try { if (!key.trim()) throw new Error("أدخل المفتاح أولًا"); if (test) await testAIConnection(provider.id, key); else await saveAPIKey(provider.id, key); Alert.alert("تم", test ? "الاتصال بالنموذج يعمل" : "تم حفظ المفتاح بأمان"); }
-    catch (error) { Alert.alert("تعذر الإكمال", error instanceof Error ? error.message : "حاول مرة أخرى"); }
+    try { if (!key.trim()) throw new Error("أدخل المفتاح أولًا"); if (test) await testAIConnection(provider.id, key); else await saveAPIKey(provider.id, key); setStatus(test?"آخر اختبار: الاتصال ناجح":"المفتاح محفوظ؛ اختبر الاتصال للتأكد"); Alert.alert("تم", test ? "الاتصال بالنموذج يعمل" : "تم حفظ المفتاح بأمان"); }
+    catch (error) { setStatus(error instanceof Error?error.message:"تعذر الاتصال"); Alert.alert("تعذر الإكمال", error instanceof Error ? error.message : "حاول مرة أخرى"); }
     finally { setBusy(null); }
   }
   return <View style={{ marginTop: 18, gap: 8 }}>
     <View style={{ flexDirection: "row", justifyContent: "space-between" }}><Text style={{ color: c.text, fontWeight: "700" }}>{provider.label}</Text><Text style={{ color: c.textSecondary, fontSize: 12 }}>{provider.subtitle}</Text></View>
+    <Text style={{color:c.textSecondary,fontFamily:"ArabicRegular",textAlign:"right",fontSize:12}}>{status??(key?"المفتاح موجود؛ لم يُختبر في هذه الجلسة":"المفتاح غير مضاف")}</Text>
     <View style={{ backgroundColor: c.surfaceAlt, borderRadius: 14, borderWidth: 1, borderColor: c.border, flexDirection: "row", alignItems: "center" }}>
       <TextInput accessibilityLabel={`مفتاح ${provider.label}`} value={key} onChangeText={setKey} secureTextEntry={!show} autoCapitalize="none" autoCorrect={false} placeholder="API Key" placeholderTextColor={c.textSecondary} style={{ flex: 1, padding: 14, color: c.text }} />
       <Pressable accessibilityLabel={show ? "إخفاء المفتاح" : "إظهار المفتاح"} onPress={() => setShow(!show)} style={{ padding: 14 }}><Icon name={show ? "eye-off" : "eye"} color={c.textSecondary} size={18} /></Pressable>

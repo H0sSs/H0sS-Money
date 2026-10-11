@@ -1,3 +1,5 @@
+import { useRouter } from "expo-router";
+import { getAccounts } from "@/lib/finance";
 import PageHeader from "@/components/PageHeader";
 import { numericInput, validAmount } from "@/lib/validation";
 import { localDate, parseDate } from "@/lib/dates";
@@ -140,16 +142,16 @@ function WeeklySummaryCard({ colors }: { colors: any }) {
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Icon name={trendIcon} size={13} color={trendColor} />
-          <Text style={{ color: trendColor, fontSize: 12, fontFamily: "Inter_600SemiBold" }}>
+          <Text style={{ color: trendColor, fontSize: 12, fontFamily: "ArabicBold" }}>
             {summary.diffPct > 0 ? "+" : ""}{summary.diffPct.toFixed(0)}%
           </Text>
         </View>
       </View>
       <Text style={[s.weeklyTotal, { color: colors.text }]}>
-        {summary.total.toFixed(0)} <Text style={{ color: colors.primary, fontSize: 14 }}>{currency}</Text>
+        {summary.total.toFixed(2)} <Text style={{ color: colors.primary, fontSize: 14 }}>{currency}</Text>
       </Text>
       <Text style={[s.weeklySub, { color: colors.textSecondary }]}>
-        {summary.count} عملية • متوسط {summary.avgPerDay.toFixed(0)} {currency}/يوم
+        {summary.count} عملية • متوسط {summary.avgPerDay.toFixed(2)} {currency}/يوم
       </Text>
       {summary.topCategory && (
         <View style={[s.weeklyRow, { borderTopColor: colors.border }]}>
@@ -175,7 +177,7 @@ function WeeklySummaryCard({ colors }: { colors: any }) {
             </Text>
           </View>
           <Text style={[s.weeklyRowAmt, { color: colors.primary }]}>
-            {summary.topDay.total.toFixed(0)} {currency}
+            {summary.topDay.total.toFixed(2)} {currency}
           </Text>
         </View>
       )}
@@ -199,7 +201,7 @@ interface ConfirmModalProps {
   saving: boolean;
   colors: any;
   onCancel: () => void;
-  onSave: (data: { amount: number; description: string; categoryId: number | null; note: string | null }) => void;
+  onSave: (data: { amount: number; description: string; categoryId: number | null; note: string | null; date: string; accountId: number }) => void;
 }
 
 function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCancel, onSave }: ConfirmModalProps) {
@@ -207,12 +209,17 @@ function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCa
   const [description, setDescription] = useState("");
   const [note, setNote] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [date,setDate]=useState(localDate());
+  const [account,setAccount]=useState(0);
+  const {data:accounts=[]}=useQuery({queryKey:['accounts'],queryFn:getAccounts});
 
   React.useEffect(() => {
     if (parsed) {
       setAmount(parsed.amount != null ? String(parsed.amount) : "");
       setDescription(parsed.description ?? "");
       setNote(parsed.note ?? "");
+      setDate(localDate());
+      setAccount(0);
       const matched = categories.find(
         (c) => parsed.categoryName && c.name.toLowerCase().includes(parsed.categoryName.toLowerCase())
       );
@@ -226,13 +233,15 @@ function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCa
       Alert.alert("خطأ", "المبلغ والوصف مطلوبان");
       return;
     }
-    onSave({ amount: num, description: description.trim(), categoryId: selectedCategoryId, note: note.trim() || null });
+    try{parseDate(date);}catch(e){Alert.alert("التاريخ غير صالح",e instanceof Error?e.message:"");return;}
+    const accountId=account||accounts[0]?.id;if(!accountId){Alert.alert("حساب مفقود","أضف حسابًا أولًا");return;}
+    onSave({ amount: num, description: description.trim(), categoryId: selectedCategoryId, note: note.trim() || null, date,accountId });
   };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <View style={s.modalOverlay}>
-        <View style={[s.modalSheet, { backgroundColor: colors.surface }]}>
+        <ScrollView keyboardShouldPersistTaps="handled" style={{maxHeight:"90%"}} contentContainerStyle={[s.modalSheet, { backgroundColor: colors.surface }]}>
           <View style={[s.modalHandle, { backgroundColor: colors.border }]} />
           <Text style={[s.modalTitle, { color: colors.text }]}>تأكيد المصروف</Text>
 
@@ -245,7 +254,7 @@ function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCa
             </View>
           )}
 
-          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>المبلغ (جنيه)</Text>
+          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>المبلغ</Text>
           <TextInput
             style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
             value={amount}
@@ -264,6 +273,10 @@ function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCa
             placeholderTextColor={colors.textSecondary}
           />
 
+          <Text style={[s.fieldLabel,{color:colors.textSecondary}]}>تاريخ المصروف YYYY-MM-DD</Text>
+          <TextInput accessibilityLabel="تاريخ المصروف" value={date} onChangeText={setDate} style={[s.input,{color:colors.text,backgroundColor:colors.surfaceAlt,borderColor:colors.border,writingDirection:'ltr'}]}/>
+          <Text style={[s.fieldLabel,{color:colors.textSecondary}]}>الحساب</Text>
+          <ScrollView horizontal contentContainerStyle={{gap:8}} style={{marginBottom:10}}>{accounts.map(a=><Pressable key={a.id} onPress={()=>setAccount(a.id)} style={{padding:10,borderRadius:12,borderWidth:1,borderColor:(account||accounts[0]?.id)===a.id?colors.primary:colors.border}}><Text style={{color:colors.text,fontFamily:'ArabicRegular'}}>{a.name}</Text></Pressable>)}</ScrollView>
           <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>الفئة</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
             {categories.map((cat) => {
@@ -302,7 +315,7 @@ function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCa
               )}
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -310,6 +323,7 @@ function ConfirmExpenseModal({ visible, parsed, categories, saving, colors, onCa
 
 // ─── Home Screen ──────────────────────────────────────────────
 export default function HomeScreen() {
+  const router=useRouter();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
@@ -339,9 +353,10 @@ export default function HomeScreen() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: { amount: number; description: string; categoryId: number | null; note: string | null }) =>
-      createExpense({ ...data, date: today }),
+    mutationFn: (data: { amount: number; description: string; categoryId: number | null; note: string | null; date: string; accountId:number }) =>
+      createExpense(data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
@@ -438,17 +453,7 @@ export default function HomeScreen() {
         <PageHeader title="مصروفك تحت السيطرة" subtitle={today_label} icon="home" logo={settings?.logoBase64 || settings?.logoUri} />
 
         <TodaySummary colors={colors} />
-
-        <WeeklySummaryCard colors={colors} />
-
-        {monthlyGoal != null && monthlyGoal > 0 && (
-          <MonthlyGoalRing
-            used={Number(monthStats?.total ?? 0)}
-            goal={monthlyGoal}
-            currency={currency}
-            colors={colors}
-          />
-        )}
+        <View style={{flexDirection:'row',gap:8,marginHorizontal:16,marginBottom:12}}>{[{label:'الحسابات',section:'accounts'},{label:'إضافة دخل',section:'income'}].map(x=><Pressable key={x.section} onPress={()=>router.push({pathname:'/finance',params:{section:x.section}})} style={{flex:1,padding:12,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:12}}><Text style={{color:colors.primary,textAlign:'center',fontFamily:'ArabicBold'}}>{x.label}</Text></Pressable>)}</View>
 
         <View style={[s.micSection, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 28, marginHorizontal: 16, marginBottom: 20 }]}>
           <Text style={[s.micHint, { color: colors.textSecondary }]}>
@@ -471,11 +476,22 @@ export default function HomeScreen() {
           </View>
 
           <Text style={[s.exampleText, { color: colors.textSecondary }]}>
-            مثال: "اشتريت سجاير بـ 50 جنيه"
+            مثال: "اشتريت قهوة بـ 50 جنيه"
           </Text>
         </View>
 
         <Pressable onPress={() => { setParsedData({ amount: null, description: "", categoryName: null, note: null, transcript: "" }); setShowModal(true); }} style={{ marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }}><Icon name="plus" size={18} color={colors.primary} /><Text style={{ color: colors.text, fontWeight: "700" }}>إضافة مصروف يدويًا</Text></Pressable>
+        <WeeklySummaryCard colors={colors} />
+
+        {monthlyGoal != null && monthlyGoal > 0 && (
+          <MonthlyGoalRing
+            used={Number(monthStats?.total ?? 0)}
+            goal={monthlyGoal}
+            currency={currency}
+            colors={colors}
+          />
+        )}
+
         <View style={s.sectionHeader}>
           <Text style={[s.sectionTitle, { color: colors.text }]}>آخر المصاريف</Text>
         </View>
@@ -515,53 +531,53 @@ export default function HomeScreen() {
 const s = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
-  appName: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  dateText: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  appName: { fontSize: 22, fontFamily: "ArabicBold" },
+  dateText: { fontSize: 13, fontFamily: "ArabicRegular" },
   summaryCard: { marginHorizontal: 16, marginBottom: 20, borderRadius: 22, borderWidth: 1, padding: 20 },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  summaryLabel: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 4 },
-  summaryAmount: { fontSize: 36, fontFamily: "Inter_700Bold" },
-  summaryCount: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
+  summaryLabel: { fontSize: 13, fontFamily: "ArabicRegular", marginBottom: 4 },
+  summaryAmount: { fontSize: 36, fontFamily: "ArabicBold" },
+  summaryCount: { fontSize: 13, fontFamily: "ArabicRegular", marginTop: 2 },
   speakBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24, borderWidth: 1 },
-  speakBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  speakBtnText: { fontSize: 13, fontFamily: "ArabicBold" },
   micSection: { alignItems: "center", paddingVertical: 24 },
-  micHint: { fontSize: 15, fontFamily: "Inter_500Medium", marginBottom: 24, textAlign: "center" },
+  micHint: { fontSize: 15, fontFamily: "ArabicRegular", marginBottom: 24, textAlign: "center" },
   micWrapper: { position: "relative", alignItems: "center", justifyContent: "center", marginBottom: 20 },
   pulse: { position: "absolute", width: 100, height: 100, borderRadius: 34, opacity: 0 },
   micBtn: { width: 100, height: 100, borderRadius: 34, alignItems: "center", justifyContent: "center", elevation: 6, shadowColor: "#F0B429", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12 },
-  exampleText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 4 },
+  exampleText: { fontSize: 13, fontFamily: "ArabicRegular", textAlign: "center", marginTop: 4 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, marginBottom: 10 },
-  sectionTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  sectionTitle: { fontSize: 16, fontFamily: "ArabicBold" },
   emptyBox: { marginHorizontal: 20, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", padding: 32, alignItems: "center", gap: 8 },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  emptyText: { fontSize: 14, fontFamily: "ArabicRegular" },
   expenseRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, padding: 14, gap: 12 },
   expCatDot: { width: 10, height: 10, borderRadius: 5 },
-  expDesc: { fontSize: 14, fontFamily: "Inter_500Medium" },
-  expCat: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  expAmount: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  expDesc: { fontSize: 14, fontFamily: "ArabicRegular" },
+  expCat: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 2 },
+  expAmount: { fontSize: 16, fontFamily: "ArabicBold" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
   modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 40 },
   modalHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 },
-  modalTitle: { fontSize: 18, fontFamily: "Inter_700Bold", textAlign: "center", marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontFamily: "ArabicBold", textAlign: "center", marginBottom: 16 },
   transcriptBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 14 },
-  transcriptText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular" },
-  fieldLabel: { fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 6, marginTop: 4 },
-  input: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, fontFamily: "Inter_400Regular", marginBottom: 4, textAlign: "right" },
+  transcriptText: { flex: 1, fontSize: 13, fontFamily: "ArabicRegular" },
+  fieldLabel: { fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 6, marginTop: 4 },
+  input: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, fontFamily: "ArabicRegular", marginBottom: 4, textAlign: "right" },
   catChip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, marginRight: 8 },
-  catChipText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  catChipText: { fontSize: 12, fontFamily: "ArabicRegular" },
   modalActions: { flexDirection: "row", gap: 12, marginTop: 16 },
   cancelBtn: { flex: 1, borderWidth: 1, borderRadius: 14, padding: 14, alignItems: "center" },
-  cancelBtnText: { fontSize: 15, fontFamily: "Inter_500Medium" },
+  cancelBtnText: { fontSize: 15, fontFamily: "ArabicRegular" },
   saveBtn: { flex: 2, borderRadius: 14, padding: 14, alignItems: "center" },
-  saveBtnText: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  saveBtnText: { fontSize: 15, fontFamily: "ArabicBold" },
   weeklyCard: { marginHorizontal: 16, marginBottom: 20, borderRadius: 22, borderWidth: 1, padding: 20 },
   weeklyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  weeklyTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  weeklyTotal: { fontSize: 26, fontFamily: "Inter_700Bold" },
-  weeklySub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 4 },
+  weeklyTitle: { fontSize: 12, fontFamily: "ArabicBold", textTransform: "uppercase",  },
+  weeklyTotal: { fontSize: 26, fontFamily: "ArabicBold" },
+  weeklySub: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 4 },
   weeklyRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 10, marginTop: 10, borderTopWidth: 1 },
   weeklyDot: { width: 9, height: 9, borderRadius: 5 },
-  weeklyRowLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  weeklyRowValue: { fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 },
-  weeklyRowAmt: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  weeklyRowLabel: { fontSize: 11, fontFamily: "ArabicRegular" },
+  weeklyRowValue: { fontSize: 12, fontFamily: "ArabicRegular", flex: 1 },
+  weeklyRowAmt: { fontSize: 13, fontFamily: "ArabicBold" },
 });

@@ -1,3 +1,4 @@
+import {getAccounts} from "@/lib/finance";
 import PageHeader from "@/components/PageHeader";
 import { numericInput, validAmount } from "@/lib/validation";
 import { localDate, parseDate } from "@/lib/dates";
@@ -5,7 +6,7 @@ import React, { useState, useEffect } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   View, Text, StyleSheet, FlatList, Pressable, Alert,
-  Modal, TextInput, ActivityIndicator, Platform, Share,
+  Modal, ScrollView, TextInput, ActivityIndicator, Platform, Share,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -15,7 +16,7 @@ import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 import { useTheme } from "@/contexts/ThemeContext";
-import { getExpenses, deleteExpense, updateExpense, getCategories, getSettings, exportExpensesCSV } from "@/lib/services";
+import { getExpenses, deleteExpense, updateExpense, getCategories, getSettings, exportExpensesCSV, restoreExpense, createExpense } from "@/lib/services";
 import type { Expense, Category } from "@/lib/services";
 
 function formatDate(dateStr: string) {
@@ -37,7 +38,7 @@ interface EditModalProps {
   colors: any;
   saving: boolean;
   onClose: () => void;
-  onSave: (data: { amount: number; description: string; categoryId: number | null; note: string | null; date: string }) => void;
+  onSave: (data: { amount: number; description: string; categoryId: number | null; note: string | null; date: string; accountId:number }) => void;
 }
 
 function EditExpenseModal({ visible, expense, categories, colors, saving, onClose, onSave }: EditModalProps) {
@@ -46,6 +47,8 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
   const [note, setNote] = useState("");
   const [catId, setCatId] = useState<number | null>(null);
   const [date, setDate] = useState("");
+  const [account,setAccount]=useState(0);
+  const {data:accounts=[]}=useQuery({queryKey:["accounts"],queryFn:getAccounts});
 
   React.useEffect(() => {
     if (expense) {
@@ -54,6 +57,7 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
       setNote(expense.note ?? "");
       setCatId(expense.category_id ?? null);
       setDate(expense.date);
+      setAccount(expense.account_id??0);
     }
   }, [expense]);
 
@@ -63,13 +67,14 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
       Alert.alert("خطأ", "المبلغ والوصف مطلوبان");
       return;
     }
-    onSave({ amount: num, description: description.trim(), categoryId: catId, note: note.trim() || null, date });
+    const accountId=account||accounts[0]?.id;if(!accountId){Alert.alert("حساب مفقود","اختر حسابًا");return;}
+    onSave({ amount: num, description: description.trim(), categoryId: catId, note: note.trim() || null, date,accountId });
   };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.overlay}>
-        <View style={[s.sheet, { backgroundColor: colors.surface }]}>
+        <ScrollView keyboardShouldPersistTaps="handled" style={{maxHeight:"90%"}} contentContainerStyle={[s.sheet, { backgroundColor: colors.surface }]}>
           <View style={[s.handle, { backgroundColor: colors.border }]} />
           <Text style={[s.sheetTitle, { color: colors.text }]}>تعديل المصروف</Text>
 
@@ -100,6 +105,7 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
           <TextInput style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
             value={date} onChangeText={setDate} placeholder="2025-01-01" placeholderTextColor={colors.textSecondary} />
 
+          <Text style={[s.label,{color:colors.textSecondary}]}>الحساب</Text><ScrollView horizontal contentContainerStyle={{gap:8}}>{accounts.map(a=><Pressable key={a.id} onPress={()=>setAccount(a.id)} style={{padding:10,borderWidth:1,borderColor:(account||accounts[0]?.id)===a.id?colors.primary:colors.border,borderRadius:10}}><Text style={{color:colors.text,fontFamily:'ArabicRegular'}}>{a.name}</Text></Pressable>)}</ScrollView>
           <Text style={[s.label, { color: colors.textSecondary }]}>ملاحظة</Text>
           <TextInput style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
             value={note} onChangeText={setNote} placeholder="اختياري" placeholderTextColor={colors.textSecondary} />
@@ -112,7 +118,7 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
               {saving ? <ActivityIndicator size="small" color={colors.background} /> : <Text style={[s.saveText, { color: colors.buttonText }]}>حفظ</Text>}
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -127,6 +133,8 @@ export default function ExpensesScreen() {
   const queryClient = useQueryClient();
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [deleted,setDeleted]=useState<Expense|null>(null);
+  const [showFilters,setShowFilters]=useState(false);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [catFilter, setCatFilter] = useState<number | null>(null);
@@ -171,7 +179,9 @@ export default function ExpensesScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteExpense,
-    onSuccess: () => {
+    onSuccess: (_,id) => {
+      setDeleted(allExpenses.find(e=>e.id===id)??null);
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
@@ -181,9 +191,12 @@ export default function ExpensesScreen() {
     },
   });
 
+  const cloneMutation=useMutation({mutationFn:createExpense,onSuccess:()=>{queryClient.invalidateQueries();setEditExpense(null);},onError:(e)=>Alert.alert('تعذر الإضافة',e.message)});
+  const restoreMutation=useMutation({mutationFn:restoreExpense,onSuccess:()=>{setDeleted(null);queryClient.invalidateQueries();},onError:e=>Alert.alert('تعذر الاستعادة',e.message)});
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => updateExpense(id, data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
@@ -249,6 +262,8 @@ export default function ExpensesScreen() {
             </Pressable>
           )}
         </View>
+        <Pressable onPress={()=>setShowFilters(!showFilters)} style={{paddingVertical:12}}><Text style={{color:colors.primary,textAlign:'right',fontFamily:'ArabicBold'}}>{showFilters?'إخفاء الفلاتر':'الفلاتر'}{filterActive?' · مفعّلة':''}</Text></Pressable>
+        {showFilters&&<>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -267,7 +282,7 @@ export default function ExpensesScreen() {
                 onPress={() => setDateFilter(item.val)}
                 style={[s.filterChip, { backgroundColor: sel ? colors.primary + "25" : colors.surface, borderColor: sel ? colors.primary : colors.border }]}
               >
-                <Text style={{ color: sel ? colors.primary : colors.textSecondary, fontSize: 12, fontFamily: "Inter_500Medium" }}>{item.label}</Text>
+                <Text style={{ color: sel ? colors.primary : colors.textSecondary, fontSize: 12, fontFamily: "ArabicRegular" }}>{item.label}</Text>
               </Pressable>
             );
           }}
@@ -288,13 +303,15 @@ export default function ExpensesScreen() {
                   style={[s.filterChip, { backgroundColor: sel ? item.color + "25" : colors.surface, borderColor: sel ? item.color : colors.border, flexDirection: "row", alignItems: "center", gap: 5 }]}
                 >
                   {!isAll && <Icon name={item.icon} size={12} color={sel ? item.color : colors.textSecondary} />}
-                  <Text style={{ color: sel ? item.color : colors.textSecondary, fontSize: 12, fontFamily: "Inter_500Medium" }}>{item.name}</Text>
+                  <Text style={{ color: sel ? item.color : colors.textSecondary, fontSize: 12, fontFamily: "ArabicRegular" }}>{item.name}</Text>
                 </Pressable>
               );
             }}
           />
         )}
+        </>}
       </View>
+      {!!deleted&&<View style={{marginHorizontal:16,padding:12,borderRadius:12,backgroundColor:colors.surfaceAlt,flexDirection:'row',alignItems:'center',gap:10}}><Pressable disabled={restoreMutation.isPending} onPress={()=>restoreMutation.mutate(deleted)}><Text style={{color:colors.primary,fontFamily:'ArabicBold'}}>تراجع عن الحذف</Text></Pressable><Text style={{flex:1,textAlign:'right',color:colors.text,fontFamily:'ArabicRegular'}} numberOfLines={1}>{deleted.description}</Text><Pressable accessibilityLabel="إغلاق التراجع" onPress={()=>setDeleted(null)}><Icon name="x" color={colors.textSecondary} size={18}/></Pressable></View>}
 
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
@@ -303,7 +320,7 @@ export default function ExpensesScreen() {
       ) : expenses.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
           <Icon name="inbox" size={48} color={colors.textSecondary} />
-          <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 15 }}>لا توجد مصاريف بعد</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: "ArabicRegular", fontSize: 15 }}>لا توجد مصاريف بعد</Text>
         </View>
       ) : (
         <FlatList
@@ -338,6 +355,7 @@ export default function ExpensesScreen() {
                   <Text style={[filterActive ? s.amountCompact : s.amount, { color: colors.primary }]}>
                     {Number(exp.amount).toFixed(2)}
                   </Text>
+                  <Pressable accessibilityLabel={'تكرار '+exp.description} onPress={()=>setEditExpense({...exp,id:-1,uid:'',date:localDate()})} hitSlop={10} style={{marginLeft:8}}><Icon name="copy" color={colors.textSecondary} size={16}/></Pressable>
                   <Pressable onPress={() => setEditExpense(exp)} hitSlop={10} style={{ marginLeft: 8 }}>
                     <Icon name="edit-2" size={filterActive ? 14 : 16} color={colors.textSecondary} />
                   </Pressable>
@@ -356,9 +374,9 @@ export default function ExpensesScreen() {
         expense={editExpense}
         categories={categories}
         colors={colors}
-        saving={updateMutation.isPending}
+        saving={updateMutation.isPending||cloneMutation.isPending}
         onClose={() => setEditExpense(null)}
-        onSave={(data) => editExpense && updateMutation.mutate({ id: editExpense.id, data })}
+        onSave={(data) => {if(editExpense?.id===-1)cloneMutation.mutate(data);else if(editExpense)updateMutation.mutate({id:editExpense.id,data});}}
       />
     </View>
   );
@@ -367,34 +385,34 @@ export default function ExpensesScreen() {
 const s = StyleSheet.create({
   container: { flex: 1 },
   topBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1 },
-  title: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  title: { fontSize: 22, fontFamily: "ArabicBold" },
+  subtitle: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 2 },
   exportBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
-  exportText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  exportText: { fontSize: 13, fontFamily: "ArabicBold" },
   dateSep: { borderBottomWidth: 1, marginHorizontal: 16, marginVertical: 8, alignItems: "flex-end" },
-  dateLabel: { fontSize: 12, fontFamily: "Inter_500Medium", paddingHorizontal: 8, marginBottom: -8 },
+  dateLabel: { fontSize: 12, fontFamily: "ArabicRegular", paddingHorizontal: 8, marginBottom: -8 },
   row: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, padding: 14, gap: 10 },
   rowCompact: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 4, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
-  amountCompact: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  amountCompact: { fontSize: 13, fontFamily: "ArabicBold" },
   catDot: { width: 10, height: 10, borderRadius: 5 },
-  desc: { fontSize: 14, fontFamily: "Inter_500Medium" },
-  cat: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  note: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2, fontStyle: "italic" },
-  amount: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  desc: { fontSize: 14, fontFamily: "ArabicRegular" },
+  cat: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 2 },
+  note: { fontSize: 11, fontFamily: "ArabicRegular", marginTop: 2, fontStyle: "italic" },
+  amount: { fontSize: 15, fontFamily: "ArabicBold" },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 40 },
   handle: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 },
-  sheetTitle: { fontSize: 18, fontFamily: "Inter_700Bold", textAlign: "center", marginBottom: 16 },
-  label: { fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 6, marginTop: 4 },
-  input: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, fontFamily: "Inter_400Regular", marginBottom: 4, textAlign: "right" },
+  sheetTitle: { fontSize: 18, fontFamily: "ArabicBold", textAlign: "center", marginBottom: 16 },
+  label: { fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 6, marginTop: 4 },
+  input: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, fontFamily: "ArabicRegular", marginBottom: 4, textAlign: "right" },
   chip: { borderRadius: 20, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, marginRight: 8 },
-  chipText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  chipText: { fontSize: 12, fontFamily: "ArabicRegular" },
   actions: { flexDirection: "row", gap: 12, marginTop: 16 },
   cancelBtn: { flex: 1, borderWidth: 1, borderRadius: 14, padding: 14, alignItems: "center" },
-  cancelText: { fontSize: 15, fontFamily: "Inter_500Medium" },
+  cancelText: { fontSize: 15, fontFamily: "ArabicRegular" },
   saveBtn: { flex: 2, borderRadius: 14, padding: 14, alignItems: "center" },
-  saveText: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  saveText: { fontSize: 15, fontFamily: "ArabicBold" },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
-  searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "right", paddingVertical: 4 },
+  searchInput: { flex: 1, fontSize: 14, fontFamily: "ArabicRegular", textAlign: "right", paddingVertical: 4 },
   filterChip: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6 },
 });

@@ -1,3 +1,6 @@
+import Guide from "@/components/Guide";
+import { postRecurring } from "@/lib/finance";
+import { db } from "@/lib/db";
 import { useFonts } from "expo-font";
 import { QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { Stack } from "expo-router";
@@ -6,7 +9,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState, Image, useColorScheme } from "react-native";
 import { Alert } from "react-native";
 import { queryClient } from "@/lib/query";
 import { localDate } from "@/lib/dates";
@@ -20,7 +23,7 @@ import {
   setNotificationsEnabled,
 } from "@/lib/notifications";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
-import { DarkColors } from "@/lib/theme";
+import { DarkColors, LightColors } from "@/lib/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Icon from "@/components/Icon";
 
@@ -28,12 +31,12 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 
 function LoadingScreen({ message }: { message: string }) {
-  const C = DarkColors;
+  const C = useColorScheme()==="dark"?DarkColors:LightColors;
   return (
     <View style={[lock.container, { backgroundColor: C.background }]}>
       <View style={lock.inner}>
         <View style={[lock.circle, { backgroundColor: C.primary + "20", borderColor: C.primary }]}>
-          <Text style={{ color: C.primary, fontSize: 36, fontWeight: "700" }}>H</Text>
+          <Image source={require("../assets/images/icon.png")} style={{width:80,height:80,borderRadius:18}}/>
         </View>
         <Text style={[lock.title, { color: C.text }]}>H0sS-Money</Text>
         <ActivityIndicator color={C.primary} size="small" style={{ marginTop: 12 }} />
@@ -44,7 +47,7 @@ function LoadingScreen({ message }: { message: string }) {
 }
 
 function LockGate({ onUnlock }: { onUnlock: () => void }) {
-  const C = DarkColors;
+  const C = useColorScheme()==="dark"?DarkColors:LightColors;
   const [status, setStatus] = useState<"idle" | "working" | "failed">("idle");
 
   const tryAuth = async () => {
@@ -100,7 +103,7 @@ function ThemedNavigator() {
   const { isDark, colors } = useTheme();
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
-      <Stack screenOptions={{ headerShown: false, statusBarStyle: isDark ? "light" : "dark" }}>
+      <Guide/><Stack screenOptions={{ headerShown: false, statusBarStyle: isDark ? "light" : "dark" }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
     </GestureHandlerRootView>
@@ -109,10 +112,8 @@ function ThemedNavigator() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular: require("../assets/fonts/Inter-Regular.otf"),
-    Inter_500Medium: require("../assets/fonts/Inter-Medium.otf"),
-    Inter_600SemiBold: require("../assets/fonts/Inter-SemiBold.otf"),
-    Inter_700Bold: require("../assets/fonts/Inter-Bold.otf"),
+    ArabicRegular: require('../assets/fonts/HossArabic-Regular.ttf'),
+    ArabicBold: require('../assets/fonts/HossArabic-Bold.ttf'),
   });
   const [dbReady, setDbReady] = useState(false);
   const [authNeeded, setAuthNeeded] = useState(false);
@@ -202,6 +203,13 @@ export default function RootLayout() {
       } catch {}
     })();
   }, [canPromptNotifs]);
+  useEffect(()=>{
+    if(!canPromptNotifs)return;
+    let running=false;
+    const process=async()=>{if(running)return;running=true;try{const enabled=await db.getFirstAsync<{value:string}>("SELECT value FROM settings WHERE key='recurringAuto'");if(enabled?.value==='true'){await postRecurring();queryClient.invalidateQueries();}}catch(e){Alert.alert('المصاريف المتكررة',e instanceof Error?e.message:'تعذر تسجيل المستحقات');}finally{running=false;}};
+    process();const sub=AppState.addEventListener('change',state=>{if(state==='active')process();});return()=>sub.remove();
+  },[canPromptNotifs]);
+
 
   if (bootError) return <SafeAreaProvider><View style={[lock.container, { backgroundColor: DarkColors.background }]}><Text style={{ color: DarkColors.text, textAlign: "center", padding: 24 }}>{bootError}</Text><Pressable style={[lock.btn, { backgroundColor: DarkColors.primary }]} onPress={() => setBootAttempt(value => value + 1)}><Text>إعادة المحاولة</Text></Pressable></View></SafeAreaProvider>;
 

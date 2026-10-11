@@ -1,0 +1,141 @@
+name: Publish verified 1.2 APKs
+on:
+  push:
+    branches: [fix/apk-delivery-1.2]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '38161701422'
+      SOURCE_SHA: '462ff3437aefab1e59cc82e6cbd84111389ddb53'
+      RELEASE_SHA: 'dd8b987963388ffc5c14231f381f6bfa1917d154'
+    steps:
+      - name: Require verified exact-source run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs" > jobs.json
+          gh api "repos/$GITHUB_REPOSITORY/compare/$SOURCE_SHA...$RELEASE_SHA" > release-diff.json
+          python3 - <<'PY'
+          import json,os
+          r=json.load(open('run.json'))
+          assert r['head_sha']==os.environ['SOURCE_SHA'] and r['status']=='completed' and r['conclusion']=='success'
+          jobs={j['name']:j for j in json.load(open('jobs.json'))['jobs']}
+          assert all(jobs[name]['conclusion']=='success' for name in ['validate','build (arm64)','build (universal)','smoke (35)','smoke (36)'])
+          allowed={'README.md','CHANGELOG.md','docs/RELEASE-1.2.md','docs/QA.md','scripts/check-voice-routing.cjs'}
+          assert all(f['filename'] in allowed for f in json.load(open('release-diff.json'))['files'])
+          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify six speech-analysis routes
+        run: |
+          npm ci --legacy-peer-deps
+          node scripts/check-voice-routing.cjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: H0sS-Money-release-arm64
+          path: downloads/arm64
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: H0sS-Money-release-universal
+          path: downloads/universal
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: android-smoke-evidence-api-*
+          path: qa
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - name: Verify and prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir delivery
+          python3 - <<'PY'
+          import pathlib,hashlib,json,os,shutil,zipfile,datetime
+          dst=pathlib.Path('delivery');rows=[];sums=[]
+          for variant in ['arm64','universal']:
+              folder=pathlib.Path('downloads')/variant
+              apk=folder/f'H0sS-Money-1.2.0-{variant}.apk'
+              digest=hashlib.sha256(apk.read_bytes()).hexdigest()
+              assert digest==(folder/'SHA256SUMS.txt').read_text().split()[0]
+              assert 'fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c' in (folder/'signature.txt').read_text()
+              package=(folder/'package.txt').read_text()
+              assert "versionCode='3'" in package and "versionName='1.2.0'" in package and 'application-debuggable' not in package
+              shutil.copy2(apk,dst/apk.name);sums.append(digest+'  '+apk.name)
+              size=apk.stat().st_size
+              rows.append(f'| {variant} | {size/1000000:.2f} MB | {100*(1-size/198186744):.2f}% |')
+          for api in [35,36]:
+              assert (pathlib.Path('qa')/f'android-smoke-evidence-api-{api}'/'result.txt').read_text().startswith('PASS:')
+          durations=[]
+          for job in json.load(open('jobs.json'))['jobs']:
+              for step in job['steps']:
+                  if step['name']=='Build optimized APK':
+                      a=datetime.datetime.fromisoformat(step['started_at'].replace('Z','+00:00'));b=datetime.datetime.fromisoformat(step['completed_at'].replace('Z','+00:00'))
+                      durations.append(job['name']+': '+str(round((b-a).total_seconds()/60,1))+' minutes')
+          report='''# H0sS-Money 1.2.0
+          
+          إصلاح تشكيل العربية في الإحصائيات، خط عربي مرخّص، شعار محفظة جديد، بداية فاتحة وداكنة، تنظيم الإعدادات بصفحات مستقلة، وكل الفئات وفترة إحصائيات مخصصة.
+          
+          التسجيل الصوتي يرجع جميع الأصناف بأسعار وفئات مستقلة لدى Gemini وOpenAI وGLM-5، مع مراجعة وتعديل وحذف وإضافة وحفظ كامل القائمة بمعاملة واحدة. السعر غير الواضح يحتاج إكمالًا، ولا يُقسّم السعر المشترك بالتخمين. الحد 50 صنفًا؛ التجاوز أو التحليل غير المكتمل يُرفض دون حفظ جزئي. فُحصت كذلك المسارات الصوتية الستة (Gemini/OpenAI للصوت × Gemini/OpenAI/GLM-5 للتحليل) مع حفظ الأصناف الثلاثة، بردود محاكاة في scripts/check-voice-routing.cjs. اختبارات طلبات AI تستخدم ردودًا محاكاة؛ الاتصال الفعلي بمفاتيح المستخدم ضمن حدود التحقق أدناه.
+          
+          ## الإضافات
+          حسابات ودخل وتحويلات، ديون وسداد جزئي، مصاريف أسبوعية وشهرية متكررة، اختيار تاريخ وحساب للمصروف، تكرار مصروف سابق وتراجع عن الحذف، دليل بداية، حالة مفاتيح AI، حالة النسخ وتذكير أسبوعي اختياري.
+          
+          الحسابات تستخدم نفس عملة العرض دون تحويل أسعار. أصل الدين للتتبع؛ السداد فقط يولد دخلًا أو مصروفًا. التكرار التلقائي يعمل عند فتح التطبيق وليس أثناء إغلاقه. التراجع يخص آخر حذف في صفحة المصاريف.
+          
+          ## APK
+          مقارنة بالحجم الأصلي 198.19 MB:
+          
+          | النسخة | الحجم | التخفيض |
+          | --- | --- | --- |
+          '''+'\n'.join(rows)+'''
+          
+          ## التحقق
+          TypeScript و14 مجموعة اختبارات، ترحيل قاعدة قديمة مع حفظ المبلغ والفئة والثيم والمعرف، الأرصدة والتحويلات والسداد ومنع التجاوز والتكرار، واستيراد v1/v2/v3 والدمج والاستبدال والتحقق قبل الكتابة. 18/18 فحص Expo وتجهيز Hermes.
+          
+          APK release والتوقيع وSHA-256، وتشغيل Android 15 و16 مع إضافة مصروف منفرد وقائمة صنفين ودخل وفتح الصفحات وإعادة التشغيل. صور الاختبارات مرفقة. صُححت نسبة المقارنة عند إنفاق سابق صفر، وعرض الكسور في الرسوم. فُحصت ملفات الإصدار النهائي نفسها بعد إعادة تجهيز Hermes وموارد APK.
+          
+          ## زمن التجميع الفعلي
+          '''+'\n'.join(durations)+'''
+          
+          مسار تجهيز JavaScript المتحقق استرجع تجميع المكتبات الأصلية من المصدر 414872e93247ccc8d6b60ca8da157e5061e38955 بعد إثبات عدم تغير المدخلات الأصلية. تجميع Gradle وHermes والموارد والتوقيع تم للإصدار النهائي؛ كل مكتبة .so مطابقة بايتًا ببايت للنسخة الأصلية، وحزمة Hermes جديدة. أرقام المدة أعلاه لهذا المسار، ولا تشمل انتظار GitHub والفحص والمحاكيات. زمن أي بناء قادم يعتمد على صلاحية التخزين والتغييرات وانتظار GitHub، ولا يوجد وعد بزمن ثابت.
+          
+          ## قبل التثبيت
+          جهّز نسخة JSON وثبّت كتحديث دون حذف التطبيق. com.hossmoney.app، versionCode 3. شهادة التطوير نفسها المطابقة لـ1.1.0؛ النشر الإنتاجي يحتاج keystore خاصًا ثابتًا. JSON v3 يشمل جميع البيانات المالية الجديدة؛ الإصدارات القديمة لا تقرأ v3.
+          
+          ## حدود التحقق
+          الصوت الفعلي والبصمة وGoogle Drive وطلبات AI بمفاتيحك تحتاج اختبار جهاز وحسابات فعلية. لا يوجد ضمان غياب كل الأخطاء على جميع الأجهزة. تنبيهات أدوات البناء الثلاثة موثقة في docs/DEPENDENCY-REVIEW.md.
+          
+          ## AI
+          Gemini أو OpenAI لتحويل الصوت، وGemini أو OpenAI أو Z.ai GLM-5 لتحليل المصروف. المفاتيح تدخل في الإعدادات ← الذكاء الاصطناعي وتحفظ في SecureStore.
+          
+          Source: '''+os.environ['SOURCE_SHA']+'\nBuild: https://github.com/H0sSs/H0sS-Money/actions/runs/'+os.environ['SOURCE_RUN']+'\nQA: https://github.com/H0sSs/H0sS-Money/actions/runs/'+os.environ['SOURCE_RUN']+'\n'
+          report='\n'.join(s.strip() for s in report.splitlines())+'\n'
+          (dst/'H0sS-Money-1.2.0-Report.md').write_text(report)
+          (dst/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n')
+          with zipfile.ZipFile(dst/'H0sS-Money-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for p in sorted(pathlib.Path('qa').rglob('*')):
+                  if p.is_file() and p.suffix in ['.png','.xml','.txt'] and p.name!='logcat.txt':z.write(p,p.relative_to('qa'))
+          print('\n'.join(rows))
+          PY
+      - name: Publish release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v1.2.0" >/dev/null 2>&1; then echo 'Release already exists; refusing overwrite'; exit 1; fi
+          gh release create v1.2.0 --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" --title "H0sS-Money 1.2.0" --notes-file delivery/H0sS-Money-1.2.0-Report.md delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.2.0-Report.md delivery/H0sS-Money-UI-QA.zip

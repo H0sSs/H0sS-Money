@@ -15,6 +15,9 @@ jobs:
       SOURCE_SHA: '462ff3437aefab1e59cc82e6cbd84111389ddb53'
       RELEASE_SHA: 'dd8b987963388ffc5c14231f381f6bfa1917d154'
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
       - name: Require verified exact-source run
         shell: bash
         run: |
@@ -31,9 +34,6 @@ jobs:
           allowed={'README.md','CHANGELOG.md','docs/RELEASE-1.2.md','docs/QA.md','scripts/check-voice-routing.cjs'}
           assert all(f['filename'] in allowed for f in json.load(open('release-diff.json'))['files'])
           PY
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_SHA }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24'

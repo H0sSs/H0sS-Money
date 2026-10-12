@@ -15,3 +15,12 @@ Limits of these checks:
 - Android's system splash centers an icon by design. The background fills the screen; this patch removes the second rectangular background rather than stretching the logo.
 - Existing features/provider options/custom logo support are preserved. Income/net in PDF is scoped to the selected report dates; net is not an account balance.
 - Native resources changed, so the strict 1.2 native-skip workflow is unsuitable. The main build uses normal Gradle/cache compilation and existing API 35/36 smoke checks.
+
+## Published APK verification
+
+- Source: `2a42e8ff119538f07e9f820ec47824c4fbcf4932`. Build and Android 15/16 smoke run: https://github.com/H0sSs/H0sS-Money/actions/runs/38237489630 . All five jobs succeeded.
+- Public release: https://github.com/H0sSs/H0sS-Money/releases/tag/v1.2.1 . Publication: https://github.com/H0sSs/H0sS-Money/actions/runs/38238931232 .
+- ARM64: 31,504,273 bytes; SHA-256 `0c9b9c866a1f4f668ef6dc0d2bb49d2ccda7e958d7ac80e837e7a0776db0b51e`.
+- Universal: 88,612,570 bytes; SHA-256 `705d6d55fcf46fbf8bd5098352c9edc8a8ed49377c1fd3046668eb59d537ad0a`.
+- Both packages: `com.hossmoney.app`, versionName 1.2.1, versionCode 4, non-debuggable, same signing certificate as 1.2.0. Publisher verifies checksums/signature/package and the PASS files from both smoke jobs before publication.
+- Smoke checks cover native startup, expense/income entry, statistics/navigation/theme and persistence; they do not exercise native PDF/image sharing or a live microphone session.

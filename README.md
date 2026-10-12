@@ -3,7 +3,7 @@
   <h1>H0sS-Money</h1>
   <p><strong>أموالك بوضوح، في مكان واحد.</strong></p>
   <p>تطبيق عربي لإدارة المصروفات والإيرادات والحسابات والديون، مع تسجيل صوتي وإحصائيات وتقارير.</p>
-  <p><a href="https://github.com/H0sSs/H0sS-Money/releases/tag/v1.2.1">تحميل الإصدار 1.2.1</a> · <a href="#features">الميزات</a> · <a href="#start">ابدأ الاستخدام</a></p>
+  <p><a href="https://github.com/H0sSs/H0sS-Money/releases/tag/v1.2.1">تحميل الإصدار 1.2.1</a> · <a href="https://github.com/H0sSs/H0sS-Money/archive/refs/heads/main.zip">تحميل السورس</a> · <a href="#features">الميزات</a> · <a href="#start">ابدأ الاستخدام</a></p>
 </div>
 
 ## تحميل التطبيق

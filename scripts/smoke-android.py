@@ -184,9 +184,11 @@ time.sleep(1)
 scroll_body()
 screenshot('ledger-table')
 assert any('QA_mixed_income' in n.get('text','') for n in nodes()), 'Income row missing from ledger table'
-tap('رجوع')
+# The ledger is scrolled; its header is outside the viewport. Use Android navigation.
+adb('shell','input','keyevent','4')
+time.sleep(2)
 tap('الإعدادات')
-tap('الديون والسداد')
+tap_scroll('الديون والسداد')
 assert any('QA_person' in n.get('text','') for n in nodes()), 'Mixed debt was not routed to debts'
 screenshot('mixed-debt-saved')
 tap('رجوع')

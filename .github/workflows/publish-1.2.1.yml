@@ -1,0 +1,106 @@
+name: Publish verified 1.2.1 APKs
+on:
+  push:
+    branches: [fix/apk-delivery-1.2.1]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '38237489630'
+      SOURCE_SHA: '2a42e8ff119538f07e9f820ec47824c4fbcf4932'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for exact-source builds and Android smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess,json,time,os,pathlib
+          def get(s):return json.loads(subprocess.check_output(['gh','api',f"repos/{os.environ['GITHUB_REPOSITORY']}/{s}"],text=True))
+          for attempt in range(100):
+              run=get('actions/runs/'+os.environ['SOURCE_RUN'])
+              assert run['head_sha']==os.environ['SOURCE_SHA']
+              if run['status']=='completed':
+                  assert run['conclusion']=='success',run['conclusion']
+                  break
+              print('Waiting for build and device QA:',attempt+1,flush=True)
+              time.sleep(20)
+          else:raise RuntimeError('Source build not ready')
+          jobs=get('actions/runs/'+os.environ['SOURCE_RUN']+'/jobs')['jobs']
+          results={j['name']:j['conclusion'] for j in jobs}
+          assert all(results.get(n)=='success' for n in ['validate','build (arm64)','build (universal)','smoke (35)','smoke (36)'])
+          diff=get('compare/'+os.environ['SOURCE_SHA']+'...'+os.environ['GITHUB_SHA'])
+          allowed={'README.md','docs/QA-1.2.1.md','.github/workflows/build-apk.yml','.github/workflows/publish-1.2.1.yml'}
+          assert all(f['filename'] in allowed for f in diff['files'])
+          pathlib.Path('verified-jobs.json').write_text(json.dumps(jobs))
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: H0sS-Money-release-arm64
+          path: downloads/arm64
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: H0sS-Money-release-universal
+          path: downloads/universal
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: android-smoke-evidence-api-*
+          path: qa
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - name: Verify package, signing, hashes and QA evidence
+        run: |
+          python3 - <<'PY'
+          import pathlib,hashlib,shutil,zipfile,os
+          dst=pathlib.Path('delivery');dst.mkdir();rows=[];sums=[]
+          for variant in ['arm64','universal']:
+              folder=pathlib.Path('downloads')/variant
+              apk=folder/f'H0sS-Money-1.2.1-{variant}.apk'
+              digest=hashlib.sha256(apk.read_bytes()).hexdigest()
+              assert digest==(folder/'SHA256SUMS.txt').read_text().split()[0]
+              assert 'fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c' in (folder/'signature.txt').read_text()
+              badging=(folder/'package.txt').read_text()
+              assert "versionName='1.2.1'" in badging and "versionCode='4'" in badging
+              assert "name='com.hossmoney.app'" in badging and 'application-debuggable' not in badging
+              shutil.copy2(apk,dst/apk.name);sums.append(digest+'  '+apk.name)
+              rows.append(f'| {variant} | {apk.stat().st_size/1000000:.2f} MB |')
+          for api in [35,36]:
+              assert (pathlib.Path('qa')/f'android-smoke-evidence-api-{api}'/'result.txt').read_text().startswith('PASS:')
+          (dst/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n')
+          with zipfile.ZipFile(dst/'H0sS-Money-1.2.1-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for p in sorted(pathlib.Path('qa').rglob('*')):
+                  if p.is_file() and p.suffix in ['.png','.xml','.txt'] and p.name!='logcat.txt':z.write(p,p.relative_to('qa'))
+          note='''# H0sS-Money 1.2.1
+
+          تصحيح رسائل حصة Gemini وتمييز حد الدقيقة واليوم والحصة الصفرية والرصيد، وطلب واحد للصوت والتحليل عند اختيار Gemini لكليهما، مع منع الضغط المتكرر.
+
+          صورة إحصائيات بمحتوى التقرير والشعار والفترة والمتوسطات؛ PDF بخط عربي مضمّن وشعار وتفاصيل المصروفات والإيرادات والصافي والفئات والحسابات والملاحظات والأيام؛ شعار بداية شفاف بخلفية كحلية موحدة. جميع الميزات السابقة محفوظة.
+
+          | APK | الحجم |
+          | --- | --- |
+          '''+'\n'.join(rows)+'''
+
+          نجح TypeScript و17 اختبارًا و18/18 فحص Expo وتجهيز Hermes، وبناء وتوقيع النسختين وفحص Android 15 و16. شواهد QA وSHA-256 مرفقة. استُخدم البناء الأصلي المعتاد لأن موارد البداية تغيرت.
+
+          اختبار Gemini حي: نجح الاتصال، ونجحت 3 من 4 حالات صوت عربية مولّدة في أسعارها. حالة السعر المفقود حذفت صنفًا بلا سعر؛ راجع النص وكل الأصناف قبل الحفظ. لا يؤكد ذلك حصة 1500 يوميًا أو دقة جميع التسجيلات. المفتاح غير مضمّن في التطبيق أو الريبو. مراجعة تصميم PDF كانت محلية؛ الاختبار الآلي الأصلي لا يتحقق من كل تصدير أو حساب خارجي.
+
+          قبل التحديث صدّر JSON وثبّت APK فوق النسخة الحالية دون حذف التطبيق. التوقيع يطابق الإصدار السابق (شهادة تطوير Expo). Android 7+، com.hossmoney.app، versionCode 4.
+
+          Build and QA: https://github.com/H0sSs/H0sS-Money/actions/runs/'''+os.environ['SOURCE_RUN']+'\nSource: '+os.environ['SOURCE_SHA']+'\n'
+          (dst/'H0sS-Money-1.2.1-Report.md').write_text('\n'.join(s.strip() for s in note.splitlines())+'\n')
+          PY
+      - name: Publish public release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v1.2.1" >/dev/null 2>&1; then echo 'Release already exists; refusing overwrite'; exit 1; fi
+          gh release create v1.2.1 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "H0sS-Money 1.2.1" --notes-file delivery/H0sS-Money-1.2.1-Report.md delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.2.1-Report.md delivery/H0sS-Money-1.2.1-UI-QA.zip

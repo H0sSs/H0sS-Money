@@ -14,8 +14,8 @@ jobs:
       contents: write
       actions: read
     env:
-      SOURCE_SHA: de98b8c24fa287ce000f44dcbc742bf9fb0903ea
-      SOURCE_RUN: '38278402182'
+      SOURCE_SHA: 7c42168c1a977304022afc166c16815cddd118f8
+      SOURCE_RUN: '38284985369'
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -30,7 +30,7 @@ jobs:
           run=get('actions/runs/'+os.environ['SOURCE_RUN'])
           assert run['head_sha']==os.environ['SOURCE_SHA'] and run['conclusion']=='success'
           jobs={j['name']:j['conclusion'] for j in get('actions/runs/'+os.environ['SOURCE_RUN']+'/jobs')['jobs']}
-          assert all(jobs.get(n)=='success' for n in ['validate','build (arm64)','build (universal)','smoke (29)','smoke (35)','smoke (36)'])
+          assert all(jobs.get(n)=='success' for n in ['assemble','smoke (29)','smoke (35)','smoke (36)'])
           PY
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
@@ -110,7 +110,7 @@ jobs:
           | النسخة | الحجم |
           | --- | --- |
           '''+'\n'.join(rows)+'''
-          TypeScript و21 اختبارًا و18/18 فحص Expo وبناء النسختين واختبارات التشغيل والتصدير على APIs 29/35/36 نجحت. لم يُجرَ اختبار حي لحساب Google أو لهاتف Xiaomi/البصمة. مراجعة الاعتماديات ما زالت تتضمن ثلاث مكتبات بناء بلا تحديث أمني؛ راجع docs/QA-1.2.3.md، ولا تعتبر هذا شهادة بخلو التطبيق من كل الثغرات.
+          TypeScript و23 اختبارًا و18/18 فحص Expo وبناء النسختين واختبارات التشغيل والتصدير على APIs 29/35/36 نجحت. لم يُجرَ اختبار حي لحساب Google أو لهاتف Xiaomi/البصمة. مراجعة الاعتماديات ما زالت تتضمن ثلاث مكتبات بناء بلا تحديث أمني؛ راجع docs/QA-1.2.3.md، ولا تعتبر هذا شهادة بخلو التطبيق من كل الثغرات.
           '''+'\nSource: '+os.environ['SOURCE_SHA']+'\nBuild: https://github.com/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+os.environ['SOURCE_RUN']+'\n'
           (dst/'H0sS-Money-1.2.3-Report.md').write_text('\n'.join(x.strip() for x in note.splitlines())+'\n')
           PY

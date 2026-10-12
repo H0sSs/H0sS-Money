@@ -3,14 +3,12 @@
   <br /><br />
   <strong>إدارة مالية يومية، بواجهة عربية واضحة.</strong>
   <p>سجّل مصروفاتك، تابع دخلك وحساباتك، وافهم أين تذهب أموالك.</p>
-  <a href="https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.2/H0sS-Money-1.2.2-arm64.apk"><img src="docs/images/download-arm64.svg" alt="تحميل APK ARM64" /></a>
-  <a href="https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.2/H0sS-Money-1.2.2-universal.apk"><img src="docs/images/download-universal.svg" alt="تحميل APK الشامل" /></a>
   <br /><br />
   <a href="#من-داخل-التطبيق">صور التطبيق</a> &nbsp; · &nbsp;
   <a href="#كل-ما-تحتاجه-لمتابعة-أموالك">الميزات</a> &nbsp; · &nbsp;
   <a href="#ابدأ-في-أربع-خطوات">البداية</a> &nbsp; · &nbsp;
   <a href="https://github.com/H0sSs/H0sS-Money/archive/refs/heads/main.zip">تحميل السورس</a>
-  <p><sub>الإصدار 1.2.2 &nbsp; | &nbsp; Android 7+ &nbsp; | &nbsp; واجهة عربية &nbsp; | &nbsp; وضع فاتح وداكن</sub></p>
+  <p><sub>السورس 1.2.3 &nbsp; | &nbsp; Android 7+ &nbsp; | &nbsp; واجهة عربية &nbsp; | &nbsp; وضع فاتح وداكن</sub></p>
 </div>
 
 ---
@@ -48,7 +46,7 @@
 
 ### تجربة تناسبك وتحافظ على بياناتك
 
-واجهة موحّدة بخط Tajawal العربي، مع بداية متناسقة للشعار والخلفية. اختر الوضع الفاتح أو الداكن وشعارك داخل التطبيق. فعّل قفل البصمة أو رمز الجهاز، واحتفظ بنسخة JSON أو ارفع نسخة يدويًا إلى Google Drive.
+واجهة موحّدة بخط Tajawal العربي، مع بداية متناسقة للشعار والخلفية. اختر الوضع الفاتح أو الداكن وشعارك داخل التطبيق. فعّل قفل البصمة أو رمز الجهاز، واحتفظ بنسخة JSON أو اختر حساب Google الموجود على هاتفك لرفع نسخة يدويًا إلى Drive بعد تفعيل إعداد المشروع من مالك التطبيق.
 
 ## ابدأ في أربع خطوات
 
@@ -75,14 +73,11 @@
 
 **ARM64** أصغر حجمًا للأجهزة التي تدعم `arm64-v8a`. **النسخة الشاملة** تدعم أيضًا `armeabi-v7a` و`x86` و`x86_64`. النسختان تقدمان الميزات نفسها.
 
-| النسخة | الحجم | التحميل |
-| --- | ---: | --- |
-| ARM64 | 31.70 MB | [APK](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.2/H0sS-Money-1.2.2-arm64.apk) |
-| الشاملة | 88.80 MB | [APK](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.2/H0sS-Money-1.2.2-universal.apk) |
+ملفات 1.2.3 الموقعة جاهزة؛ نشر APK العام ينتظر إعداد مفتاح التوقيع الخاص على GitHub. نسخ 1.2.2 والأقدم تستخدم شهادة تطوير عامة.
 
-قبل التحديث، صدّر نسخة احتياطية ثم ثبّت APK فوق النسخة الحالية **دون حذف التطبيق**.
+**الانتقال إلى 1.2.3 بتوقيع خاص:** صدّر JSON واحفظه خارج التطبيق، ثم احذف النسخة القديمة وثبّت الجديدة واسترجع JSON. مفاتيح AI تحتاج إدخالها من جديد. التحديثات التالية بنفس التوقيع لا تتطلب حذف التطبيق.
 
-[صفحة الإصدار](https://github.com/H0sSs/H0sS-Money/releases/tag/v1.2.2) &nbsp; · &nbsp; [بصمات SHA-256](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.2/SHA256SUMS.txt)
+[نتائج اختبارات 1.2.3](docs/QA-1.2.3.md) · [عينة PDF فعلية](docs/report-sample-1.2.3.pdf)
 
 <details>
 <summary><strong>البيانات والخصوصية</strong></summary>
@@ -106,7 +101,7 @@ npm run android
 
 المتطلبات: Node.js 24 وJava 17 وAndroid SDK للبناء الأصلي.
 
-[إرشادات المساهمة](CONTRIBUTING.md) · [التحقق من الإصدار](docs/QA-1.2.2.md) · [مراجعة الاعتماديات](docs/DEPENDENCY-REVIEW.md)
+[إرشادات المساهمة](CONTRIBUTING.md) · [التحقق من الإصدار](docs/QA-1.2.3.md) · [مراجعة الاعتماديات](docs/DEPENDENCY-REVIEW.md) · [إعداد Google Drive والتوقيع](docs/GOOGLE-DRIVE-SETUP.md)
 
 </details>
 

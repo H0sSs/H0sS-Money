@@ -2,7 +2,7 @@
   "expo": {
     "name": "H0sS-Money",
     "slug": "hoss-money",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hossmoney",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F1F7F6"
+      "backgroundColor": "#102D39"
     },
     "ios": {
       "supportsTablet": false,
@@ -36,7 +36,7 @@
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "versionCode": 3
+      "versionCode": 4
     },
     "plugins": [
       "expo-router",
@@ -89,11 +89,11 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 160,
-          "backgroundColor": "#F1F7F6",
+          "imageWidth": 192,
+          "backgroundColor": "#102D39",
           "dark": {
             "image": "./assets/images/splash-icon.png",
-            "backgroundColor": "#10212B"
+            "backgroundColor": "#102D39"
           }
         }
       ]

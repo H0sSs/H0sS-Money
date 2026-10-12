@@ -14,13 +14,13 @@ const expenses = [
 ];
 async function fetchMock(url, init) {
   calls.push(url);
-  let text = JSON.stringify({ expenses });
+  let text = JSON.stringify({ expenses, transcript });
   if (url.includes('/audio/transcriptions')) {
     return { ok: true, json: async () => ({ text: transcript }) };
   }
   if (url.includes('generativelanguage')) {
     const body = JSON.parse(init.body);
-    if (body.contents[0].parts.some(p => p.inlineData)) text = transcript;
+    if (body.contents[0].parts.some(p => p.inlineData) && body.generationConfig.responseMimeType !== "application/json") text = transcript;
     return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text }] } }] }) };
   }
   return { ok: true, json: async () => ({ choices: [{ message: { content: text } }] }) };
@@ -52,7 +52,7 @@ function loadModule(file) {
       assert.deepEqual(Array.from(result, r => r.amount), [20, 30, 100]);
       assert.deepEqual(Array.from(result, r => r.categoryName), ['أكل', 'مواصلات', 'تسوق']);
       assert.equal(result.length, 3);
-      assert.equal(calls.length, 2);
+      assert.equal(calls.length, speech === 'gemini' && provider === 'gemini' ? 1 : 2);
       assert.equal(result[2].transcript, transcript);
       console.log('PASS mocked speech ' + speech + ' -> analysis ' + provider + ': all 3 items');
     }

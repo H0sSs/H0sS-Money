@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p smoke
-adb install -r output/H0sS-Money-1.2.0-universal.apk
+APK=$(find output -maxdepth 1 -name "H0sS-Money-*-universal.apk" -print -quit)
+[ -n "$APK" ] || { echo "Universal APK missing"; exit 1; }
+adb install -r "$APK"
 adb logcat -c
 adb shell am start -W -n com.hossmoney.app/.MainActivity
 STATUS=0

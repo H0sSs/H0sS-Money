@@ -163,3 +163,32 @@ test('batch expense save commits all categories and prices or rolls back the ent
 test('spending changes never invent a percentage from a zero baseline',()=>{
  assert.equal(services.expenseChangePercent(39.5,0),null);assert.equal(services.expenseChangePercent(0,0),0);assert.equal(services.expenseChangePercent(0,50),-100);assert.equal(services.expenseChangePercent(150,100),50);assert.throws(()=>services.expenseChangePercent(-1,0));
 });
+
+const errors=load('lib/aiErrors.ts');
+test('quota messages distinguish minute/day/zero/billing and do not leak error text',()=>{
+ const quota=(id,value)=>({error:{details:[{'@type':'type.googleapis.com/google.rpc.QuotaFailure',violations:[{quotaId:id,quotaValue:value}]},{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'21.5s'}]}});
+ assert.match(errors.quotaMessage(quota('RequestsPerMinute',10)),/حد الطلبات أو الرموز في الدقيقة/);
+ assert.match(errors.quotaMessage(quota('RequestsPerMinute',10)),/22 ثانية/);
+ assert.match(errors.quotaMessage(quota('RequestsPerDay',1500)),/حد اليوم/);
+ assert.match(errors.quotaMessage(quota('RequestsPerDay',0)),/صفر/);
+ assert.match(errors.quotaMessage({error:{code:'insufficient_quota'}}),/رصيد/);
+ assert.match(errors.quotaMessage({error:{message:'secret-api-key'}}),/لا يمكن تأكيد/);
+ assert.ok(!errors.quotaMessage({error:{message:'secret-api-key'}}).includes('secret-api-key'));
+});
+test('Gemini voice extraction uses one request, preserves all items, and rejects missing transcripts',async()=>{
+ await ai.saveAPIKey('gemini','test-key'); let calls=0;
+ try {
+  aiFetch=async(url,init)=>{calls++; const body=JSON.parse(init.body); assert.equal(body.generationConfig.responseMimeType,'application/json'); assert.ok(body.contents[0].parts.some(p=>p.inlineData)); return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({transcript:'قهوة عشرين وتاكسي ثلاثين',expenses:[{amount:20,description:'قهوة'},{amount:30,description:'تاكسي'}]})}]}}]})};};
+  const result=await ai.parseVoiceExpense('AA==','m4a','gemini',[],'file:///mock','gemini');
+  assert.equal(calls,1);assert.deepEqual(Array.from(result,x=>x.amount),[20,30]);assert.equal(result[1].transcript,'قهوة عشرين وتاكسي ثلاثين');
+  aiFetch=async()=>({ok:true,json:async()=>({candidates:[{content:{parts:[{text:'{"expenses":[{"amount":20}]}'}]}}]})});
+  await assert.rejects(()=>ai.parseVoiceExpense('AA==','m4a','gemini',[],'file:///mock','gemini'),/كلامًا واضحًا/);
+  aiFetch=async()=>{calls++;return {ok:false,status:429,json:async()=>({error:{details:[{violations:[{quotaId:'RequestsPerMinute'}]}]}})};};calls=0;
+  await assert.rejects(()=>ai.parseVoiceExpense('AA==','m4a','gemini',[],'file:///mock','gemini'),/في الدقيقة/);assert.equal(calls,1);
+ } finally {aiFetch=global.fetch;secure.clear();}
+});
+const report=load('lib/statsReport.ts');
+test('PDF report escapes descriptions, includes every operation and scoped income net',()=>{
+ const html=report.buildStatsReport({start:'2026-10-01',end:'2026-10-12',label:'الشهر',currency:'EGP',days:12,logo:'data:image/png;base64,AA',font:'AA',boldFont:'AA',stats:{total:39.5,count:2,byDay:[{date:'2026-10-01',total:39.5}],byCategory:[{name:'أكل',total:39.5}]},expenses:[{date:'2026-10-01',amount:20,description:'<script>bad</script>'},{date:'2026-10-02',amount:19.5,description:'LAST-OPERATION',note:'تفاصيل'}],incomes:[{amount:100,date:'2026-10-03',description:'الراتب',account_id:1}],accounts:[{id:1,name:'نقدي'}]});
+ assert.ok(html.includes('&lt;script&gt;bad&lt;/script&gt;'));assert.ok(!html.includes('<script>bad</script>'));assert.ok(html.includes('LAST-OPERATION'));assert.ok(html.includes('60.50'));assert.ok(html.includes('الراتب'));assert.ok(html.includes('font/ttf;base64'));assert.ok(html.includes('table-header-group'));
+});

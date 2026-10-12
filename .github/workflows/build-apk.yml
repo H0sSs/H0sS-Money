@@ -21,6 +21,7 @@ jobs:
           cache: npm
       - run: npm ci --legacy-peer-deps
       - run: npm run check
+      - run: node scripts/check-voice-routing.cjs
       - run: npx expo-doctor
       - run: npx expo export --platform android --output-dir /tmp/android-export
   build:
@@ -91,8 +92,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p output
-          cp android/app/build/outputs/apk/release/app-release.apk output/H0sS-Money-1.2.0-${{ matrix.variant }}.apk
-          APK=output/H0sS-Money-1.2.0-${{ matrix.variant }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk output/H0sS-Money-1.2.1-${{ matrix.variant }}.apk
+          APK=output/H0sS-Money-1.2.1-${{ matrix.variant }}.apk
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" > output/signature.txt
           "$BUILD_TOOLS/aapt" dump badging "$APK" > output/package.txt

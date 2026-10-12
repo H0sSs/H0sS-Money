@@ -1,8 +1,10 @@
 import PageHeader from "@/components/PageHeader";
-import { escapeHtml } from "@/lib/validation";
+import { buildStatsReport } from "@/lib/statsReport";
+import { reportAssets } from "@/lib/reportAssets";
+import { getIncomes, getAccounts } from "@/lib/finance";
 import { localDate, parseDate, monthRange } from "@/lib/dates";
 import React, { useState, useMemo, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, useWindowDimensions, Modal, Alert, ActivityIndicator, TextInput } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, useWindowDimensions, Modal, Alert, ActivityIndicator, TextInput, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import Svg, {
@@ -16,7 +18,7 @@ import Svg, {
   LinearGradient,
   Stop,
 } from "react-native-svg";
-import ViewShot, { captureRef } from "react-native-view-shot";
+import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import * as Print from "expo-print";
 import { useQuery } from "@tanstack/react-query";
@@ -342,6 +344,7 @@ export default function StatsScreen() {
   const [drillDate, setDrillDate] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"image" | "pdf" | null>(null);
   const shotRef = useRef<View>(null);
+  const exportInFlight = useRef(false);
 
   const today = localDate();
   const [startInput,setStartInput]=useState(monthRange().start);
@@ -389,59 +392,53 @@ export default function StatsScreen() {
   });
 
   const shareAsImage = async () => {
+    if (exportInFlight.current || !stats || isLoading || compareLoading) return;
+    exportInFlight.current = true;
     try {
       setExporting("image");
-      const uri = await captureRef(shotRef, { format: "png", quality: 0.95, result: "tmpfile", snapshotContentContainer: true });
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const uri = await captureRef(shotRef, { format: "png", quality: 1, result: "tmpfile" });
       const can = await Sharing.isAvailableAsync();
       if (can) await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "إحصائيات H0sS-Money" });
     } catch (e) {
       Alert.alert("خطأ", e instanceof Error ? e.message : "فشل التصدير");
     } finally {
+      exportInFlight.current = false;
       setExporting(null);
     }
   };
 
   const shareAsPdf = async () => {
+    if (exportInFlight.current || !stats || isLoading || compareLoading) return;
+    exportInFlight.current = true;
     try {
       setExporting("pdf");
-      const total = Number(stats?.total ?? 0).toFixed(2);
-      const cnt = stats?.count ?? 0;
-
-      const catRows = (stats?.byCategory ?? [])
-        .map((c) => `<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${/^#[0-9a-f]{6}$/i.test(c.color) ? c.color : "#9CA3AF"};margin-left:8px"></span>${escapeHtml(c.name)}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:left">${c.total.toFixed(2)} ${escapeHtml(currency)}</td></tr>`)
-        .join("");
-      const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>H0sS-Money</title>
-        <style>
-          body{font-family:-apple-system,system-ui,sans-serif;padding:32px;color:#0a0a0a}
-          h1{color:#F0B429;margin:0 0 4px} .sub{color:#666;font-size:13px;margin-bottom:24px}
-          .card{border:1px solid #e5e7eb;border-radius:14px;padding:20px;margin-bottom:16px}
-          .big{font-size:32px;color:#F0B429;font-weight:700} table{width:100%;border-collapse:collapse}
-          .compare{display:flex;gap:24px} .compare>div{flex:1}
-        </style></head><body>
-        <h1>H0sS-Money</h1><div class="sub">تقرير الإحصائيات — ${periodLabel} — ${new Date().toLocaleDateString("ar-EG")}</div>
-        <div class="card"><div style="color:#666;font-size:12px">إجمالي الإنفاق</div><div class="big">${total} ${escapeHtml(currency)}</div><div style="color:#666;font-size:13px;margin-top:6px">${cnt} عملية · بمتوسط يومي ${(Number(stats?.total ?? 0) / dayCount).toFixed(2)} ${escapeHtml(currency)}</div></div>
-        <div class="card"><h3 style="margin-top:0">توزيع الفئات</h3><table>${catRows || '<tr><td style="padding:8px;color:#999">لا توجد بيانات</td></tr>'}</table></div>
-        ${compare ? `<div class="card"><h3 style="margin-top:0">مقارنة شهرية</h3><div class="compare"><div><div style="color:#666;font-size:12px">${compare.previous.month}</div><div style="font-size:22px;font-weight:600">${compare.previous.total.toFixed(2)} ${escapeHtml(currency)}</div></div><div><div style="color:#666;font-size:12px">${compare.current.month}</div><div style="font-size:22px;font-weight:600;color:#F0B429">${compare.current.total.toFixed(2)} ${escapeHtml(currency)}</div></div></div><div style="margin-top:12px;padding:12px;background:${diffPositive ? "#fef2f2" : "#f0fdf4"};border-radius:10px;color:${diffPositive ? "#b91c1c" : "#15803d"};font-weight:600">${compare.diff === 0 ? "لم يتغير" : diffPositive ? "زاد" : "قل"} الإنفاق بـ ${Math.abs(compare.diff).toFixed(2)} ${escapeHtml(currency)} ${escapeHtml(diffPctLabel)}</div></div>` : ""}
-        </body></html>`;
+      const [expenses, incomes, accounts, assets] = await Promise.all([
+        getExpenses({startDate:range.start,endDate:range.end}), getIncomes(), getAccounts(),
+        reportAssets(settings?.logoBase64),
+      ]);
+      const html = buildStatsReport({start:range.start,end:range.end,label:periodLabel,currency,days:dayCount,
+        stats, compare, expenses, incomes:incomes.filter(x=>x.date>=range.start&&x.date<=range.end), accounts,...assets});
       const { uri } = await Print.printToFileAsync({ html });
       const can = await Sharing.isAvailableAsync();
       if (can) await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "تقرير H0sS-Money PDF" });
     } catch (e) {
       Alert.alert("خطأ", e instanceof Error ? e.message : "فشل التصدير");
     } finally {
+      exportInFlight.current = false;
       setExporting(null);
     }
   };
 
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
-      <ScrollView ref={shotRef as any} contentContainerStyle={{ paddingBottom: tabBarHeight + 20, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
+      <ScrollView removeClippedSubviews={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
         <PageHeader title="صورة أوضح لإنفاقك" subtitle="تتبّع الاتجاهات واستكشف تفاصيل كل يوم وفئة" icon="bar-chart-2" actions={<>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Pressable onPress={shareAsImage} disabled={!!exporting} style={[s.shareBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Pressable accessibilityLabel="تصدير الإحصائيات صورة" onPress={shareAsImage} disabled={!!exporting || isLoading || compareLoading || !stats} style={[s.shareBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {exporting === "image" ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="image" size={16} color={colors.primary} />}
             </Pressable>
-            <Pressable onPress={shareAsPdf} disabled={!!exporting} style={[s.shareBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Pressable accessibilityLabel="تصدير تقرير PDF" onPress={shareAsPdf} disabled={!!exporting || isLoading || compareLoading || !stats} style={[s.shareBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {exporting === "pdf" ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="file-text" size={16} color={colors.primary} />}
             </Pressable>
           </View>
@@ -466,6 +463,11 @@ export default function StatsScreen() {
           <TextInput accessibilityLabel="نهاية فترة الإحصائيات" value={endInput} onChangeText={setEndInput} style={{color:colors.text,padding:12,borderWidth:1,borderColor:colors.border,borderRadius:10,writingDirection:'ltr'}}/>
           <Pressable onPress={()=>{try{const a=calendarMs(startInput),b=calendarMs(endInput);if(b<a||b-a>729*86400000)throw Error('اختر فترة مرتبة لا تزيد عن 730 يومًا');setCustomRange({start:startInput,end:endInput});}catch(e){Alert.alert('فترة غير صالحة',e instanceof Error?e.message:'راجع التاريخ');}}} style={{padding:12,backgroundColor:colors.primary,borderRadius:10}}><Text style={{color:colors.buttonText,textAlign:'center',fontFamily:'ArabicBold'}}>تطبيق الفترة</Text></Pressable>
         </View>}
+        <View ref={shotRef} collapsable={false} style={{backgroundColor:colors.background,paddingTop:18,paddingBottom:18}}>
+        <View style={{paddingHorizontal:20,marginBottom:16,flexDirection:'row',alignItems:'center',gap:12}}>
+          <Image source={settings?.logoBase64 || settings?.logoUri ? {uri:settings.logoBase64 || settings.logoUri!} : require('../../assets/images/icon.png')} style={{width:56,height:56,borderRadius:14}} resizeMode="contain" />
+          <View style={{flex:1,alignItems:'flex-end'}}><Text style={{color:colors.primary,fontWeight:'700',fontSize:16}}>H0sS · MONEY</Text><Text style={{color:colors.text,fontFamily:'ArabicBold'}}>تقرير الإحصائيات · {periodLabel}</Text><Text style={{color:colors.textSecondary,fontSize:11}}>{range.start} — {range.end}</Text></View>
+        </View>
         {/* Total + line chart */}
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 14 }}>
@@ -484,9 +486,9 @@ export default function StatsScreen() {
             تطور الإنفاق ({periodLabel})
           </Text>
           {isLoading ? null : <LineChart data={filledByDay} colors={colors} onPointPress={setDrillDate} />}
-          <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: "ArabicRegular", textAlign: "center", marginTop: 6 }}>
+          {exporting !== "image" && <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: "ArabicRegular", textAlign: "center", marginTop: 6 }}>
             اضغط على نقطة لعرض تفاصيل اليوم
-          </Text>
+          </Text>}
         </View>
 
         {/* Donut chart */}
@@ -559,6 +561,8 @@ export default function StatsScreen() {
             </Text>
           </View>
         )}
+        <Text style={{color:colors.textSecondary,textAlign:'center',fontFamily:'ArabicRegular',fontSize:11,marginTop:8}}>H0sS-Money · {dayCount} يومًا · العملة {currency}</Text>
+        </View>
       </ScrollView>
 
       <Modal visible={!!drillDate} transparent animationType="slide" onRequestClose={() => setDrillDate(null)}>

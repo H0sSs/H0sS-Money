@@ -41,7 +41,8 @@ export default function AISettings() {
   return <View>
     <Text style={{ color: c.text, fontWeight: "700", textAlign: "right" }}>تحليل المصروف</Text>{choices(false)}
     <Text style={{ color: c.text, fontWeight: "700", textAlign: "right", marginTop: 20 }}>تحويل الصوت إلى نص</Text>{choices(true)}
-    <Text style={{ color: c.textSecondary, fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 12 }}>GLM-5 يحلل النص؛ التسجيل الصوتي يستخدم مفتاح Gemini أو OpenAI. الطلبات ترسل للمزوّد المختار وتحتاج إنترنت.</Text>
+    <Text style={{ color: c.textSecondary, fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 12 }}>عند اختيار Gemini للصوت والتحليل، يُستخدم طلب واحد للتسجيل. حدود الدقيقة واليوم تختلف حسب النموذج والمشروع ويمكن مراجعتها في AI Studio. GLM-5 يحلل النص؛ التسجيل الصوتي يستخدم مفتاح Gemini أو OpenAI. الطلبات ترسل للمزوّد المختار وتحتاج إنترنت.</Text>
+    <Pressable onPress={() => Linking.openURL("https://aistudio.google.com/usage?tab=rate-limit")} style={{padding:12}}><Text style={{color:c.primary,textAlign:"center"}}>مراجعة حدود Gemini الفعلية ↗</Text></Pressable>
     {PROVIDERS.map(p => <KeyRow key={p.id} provider={p} />)}
     <Pressable onPress={() => Linking.openURL("https://z.ai/manage-apikey/apikey-list")} style={{ marginTop: 18, padding: 12 }}><Text style={{ color: c.primary, textAlign: "center", fontWeight: "700" }}>الحصول على مفتاح Z.ai ↗</Text></Pressable>
   </View>;

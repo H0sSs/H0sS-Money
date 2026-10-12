@@ -214,6 +214,7 @@ export default function HomeScreen() {
     queryFn: () => getExpenses({ startDate: weekAgo }),
   });
 
+  const voiceInFlight = useRef(false);
   const saveInFlight = useRef(false);
   const createMutation = useMutation({
     mutationFn: (data: ExpenseInput[]) => createExpenses(data),
@@ -252,7 +253,8 @@ export default function HomeScreen() {
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseScale.value }], opacity: pulseOpacity.value }));
 
   const startRecording = async () => {
-    if (isParsing || isRecording || isPreparing) return;
+    if (voiceInFlight.current || isParsing || isRecording || isPreparing) return;
+    voiceInFlight.current = true;
     setIsPreparing(true);
     try {
       const status = await AudioModule.requestRecordingPermissionsAsync();
@@ -270,11 +272,12 @@ export default function HomeScreen() {
     } catch (err) {
       console.warn("recording start failed", err);
       Alert.alert("خطأ", "فشل بدء التسجيل");
-    } finally { setIsPreparing(false); }
+    } finally { voiceInFlight.current = false; setIsPreparing(false); }
   };
 
   const stopRecording = async () => {
-    if (isParsing || !isRecording) return;
+    if (voiceInFlight.current || isParsing || !isRecording) return;
+    voiceInFlight.current = true;
     setIsParsing(true);
     try {
       setIsRecording(false);
@@ -301,6 +304,7 @@ export default function HomeScreen() {
       const msg = err instanceof Error ? err.message : "خطأ غير معروف";
       Alert.alert("خطأ في التسجيل", msg);
     } finally {
+      voiceInFlight.current = false;
       setIsParsing(false);
     }
   };

@@ -1,6 +1,6 @@
 """Re-use verified native APK containers for a strictly JS-only application update."""
 from pathlib import Path
-import zipfile,hashlib,subprocess,os,runpy
+import zipfile,hashlib,subprocess,os,runpy,json,re
 patch_manifest=runpy.run_path("scripts/patch-apk-version.py")["patch_manifest"]
 root=Path('output');root.mkdir(exist_ok=True)
 bundle=Path('/tmp/hoss-index.android.bundle').read_bytes()
@@ -27,6 +27,13 @@ for variant in ['arm64','universal']:
    if sig(entry.filename):continue
    payload=bundle if entry.filename=='assets/index.android.bundle' else old.read(entry.filename)
    if entry.filename=='AndroidManifest.xml' and base_version!=version:payload=patch_manifest(payload,base_version,version,int(base_code),int(version_code))
+   if entry.filename=='assets/app.config' and base_version!=version:
+    config=json.loads(payload);assert config['version']==base_version and config['android']['versionCode']==int(base_code)
+    text=payload.decode();text,n=re.subn(r'("version"\s*:\s*")'+re.escape(base_version)+r'(")',lambda m:m[1]+version+m[2],text);assert n==1
+    text,n=re.subn(r'("versionCode"\s*:\s*)'+re.escape(base_code)+r'(?=\s*[,}])',lambda m:m[1]+version_code,text);assert n==1
+    config['version']=version;config['android']['versionCode']=int(version_code);assert json.loads(text)==config
+    payload=text.encode()
+
    if entry.filename!='assets/index.android.bundle':expected[entry.filename]=hashlib.sha256(payload).digest()
    entry.extra=b'';new.writestr(entry,payload)
  subprocess.run([str(tools/'zipalign'),'-P','16','-f','4',str(unsigned),str(aligned)],check=True)

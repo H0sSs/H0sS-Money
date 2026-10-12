@@ -47,7 +47,7 @@ async function saveTokens(t: TokenBundle): Promise<void> {
 }
 
 export async function clearDriveAuth(): Promise<void> {
-  if (Platform.OS === "android") { try { const { GoogleSignin } = await import("@react-native-google-signin/google-signin"); await GoogleSignin.signOut(); } catch {} }
+  if (Platform.OS === "android") { try { const { GoogleSignin } = await import("@react-native-google-signin/google-signin"); GoogleSignin.configure({scopes:[DRIVE_SCOPE],offlineAccess:false}); await GoogleSignin.signOut(); } catch {} }
   await updateSetting("driveNativeAuth", "false");
   await updateSetting("driveAccountEmail", "");
   await SecureStore.deleteItemAsync("drive_access_token");

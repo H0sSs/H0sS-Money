@@ -36,7 +36,7 @@ def tap_scroll(label):
     raise RuntimeError(f'Control not reachable after scrolling: {label}')
 
 def fill_field(label,value):
-    for attempt in range(10):
+    for attempt in range(20):
         target=next((n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label),None)
         if target is not None:
             coords=list(map(int,re.findall(r'\d+',target.get('bounds',''))))
@@ -47,8 +47,8 @@ def fill_field(label,value):
                 entered=next(n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label)
                 assert entered.get('text')==value,f'Incorrect input: {label}'
                 return
-            scroll_body(down=not(len(coords)==4 and coords[3]<height*.2))
-        else:scroll_body(down=attempt<5)
+            scroll_body(down=not(len(coords)==4 and coords[2]>coords[0] and coords[3]>coords[1] and coords[3]<height*.2))
+        else:scroll_body(down=attempt<12)
     raise RuntimeError(f'Input not found: {label}')
 
 def screenshot(name):

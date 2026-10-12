@@ -12,3 +12,7 @@ Owner configuration, once per release certificate:
 The project does not currently have proof that this OAuth registration is active. Do not claim live account linking/upload/restore was tested until step 4 passes. No Google credentials or financial data are used in emulator tests. Local JSON export/share remains available, including sharing to the installed Drive app.
 
 References: https://react-native-google-signin.github.io/docs/original and https://developers.google.com/identity/protocols/oauth2/native-app
+
+## Private release publication without recompilation
+
+Configure the four signing secrets from your private signing kit at https://github.com/H0sSs/H0sS-Money/settings/secrets/actions, then run **Publish private-signed 1.2.3 without rebuilding** from Actions. The workflow reuses the verified 1.2.3 APK artifacts, verifies their hashes/source/native checks, signs them with the private certificate, checks package/version/alignment and publishes a complete release. It refuses publication with missing secrets or the old public development certificate. The current GitHub connection cannot manage repository Secrets; these must be configured by the owner.

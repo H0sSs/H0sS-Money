@@ -420,7 +420,7 @@ export default function StatsScreen() {
       ]);
       const html = buildStatsReport({start:range.start,end:range.end,label:periodLabel,currency,days:dayCount,
         stats, compare, expenses, incomes:incomes.filter(x=>x.date>=range.start&&x.date<=range.end), accounts,...assets});
-      const { uri } = await Print.printToFileAsync({ html });
+      const { uri } = await Print.printToFileAsync({ html, width:595, height:842 });
       const can = await Sharing.isAvailableAsync();
       if (can) await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "تقرير H0sS-Money PDF" });
     } catch (e) {

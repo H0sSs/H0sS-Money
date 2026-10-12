@@ -1,0 +1,122 @@
+name: Publish private-signed 1.2.3 without rebuilding
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/publish-private-1.2.3]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      SOURCE_SHA: de98b8c24fa287ce000f44dcbc742bf9fb0903ea
+      SOURCE_RUN: '38278402182'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - name: Require successful exact-source build and all native checks
+        run: |
+          python3 - <<'PY'
+          import os,subprocess,json
+          base='repos/'+os.environ['GITHUB_REPOSITORY']+'/'
+          def get(path):return json.loads(subprocess.check_output(['gh','api',base+path],text=True))
+          run=get('actions/runs/'+os.environ['SOURCE_RUN'])
+          assert run['head_sha']==os.environ['SOURCE_SHA'] and run['conclusion']=='success'
+          jobs={j['name']:j['conclusion'] for j in get('actions/runs/'+os.environ['SOURCE_RUN']+'/jobs')['jobs']}
+          assert all(jobs.get(n)=='success' for n in ['validate','build (arm64)','build (universal)','smoke (29)','smoke (35)','smoke (36)'])
+          PY
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: build-tools;36.0.0
+          log-accepted-android-sdk-licenses: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: H0sS-Money-release-*
+          path: downloads
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: android-smoke-evidence-api-*
+          path: qa
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - name: Sign verified APKs with owner private key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.HOSS_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.HOSS_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.HOSS_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.HOSS_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo 'Owner must configure all four HOSS signing secrets; refusing development-key publication.'; exit 1
+          fi
+          KEYSTORE="$RUNNER_TEMP/hoss-private-release.jks"
+          trap 'rm -f "$KEYSTORE"' EXIT
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          mkdir -p delivery
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          for VARIANT in arm64 universal; do
+            DIR="downloads/H0sS-Money-release-$VARIANT"
+            APK="$DIR/H0sS-Money-1.2.3-$VARIANT.apk"
+            EXPECTED=$(awk '{print $1}' "$DIR/SHA256SUMS.txt")
+            ACTUAL=$(sha256sum "$APK" | awk '{print $1}')
+            [ "$EXPECTED" = "$ACTUAL" ]
+            "$BT/apksigner" verify "$APK"
+            "$BT/apksigner" sign --ks "$KEYSTORE" --ks-key-alias "$KEY_ALIAS" --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD --out "delivery/H0sS-Money-1.2.3-$VARIANT.apk" "$APK"
+            FINAL="delivery/H0sS-Money-1.2.3-$VARIANT.apk"
+            "$BT/apksigner" verify --verbose --print-certs "$FINAL" > "delivery/$VARIANT-signature.txt"
+            grep -q '8967c433f04f9e2879f88a95f92c95d268316163d84db3442ef221f415fae91c' "delivery/$VARIANT-signature.txt"
+            "$BT/zipalign" -P 16 -c 4 "$FINAL"
+            "$BT/aapt" dump badging "$FINAL" > "delivery/$VARIANT-package.txt"
+          done
+      - name: Prepare verified report and evidence
+        run: |
+          python3 - <<'PY'
+          import pathlib,hashlib,zipfile,os
+          dst=pathlib.Path('delivery');rows=[];sums=[]
+          for variant in ['arm64','universal']:
+              p=dst/f'H0sS-Money-1.2.3-{variant}.apk'
+              badge=(dst/f'{variant}-package.txt').read_text()
+              assert "name='com.hossmoney.app'" in badge and "versionName='1.2.3'" in badge and "versionCode='6'" in badge and 'application-debuggable' not in badge
+              sums.append(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name)
+              rows.append(f'| {variant} | {p.stat().st_size/1000000:.2f} MB |')
+          for api in [29,35,36]:
+              folder=pathlib.Path('qa')/f'android-smoke-evidence-api-{api}'
+              assert (folder/'result.txt').read_text().startswith('PASS:')
+              assert (folder/'exports-result.txt').read_text().startswith('PASS:')
+          (dst/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n')
+          with zipfile.ZipFile(dst/'H0sS-Money-1.2.3-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for p in sorted(pathlib.Path('qa').rglob('*')):
+                  if p.is_file() and p.suffix in ['.png','.xml','.txt','.mp4','.pdf'] and p.name!='logcat.txt':z.write(p,p.relative_to('qa'))
+          note='''# H0sS-Money 1.2.3
+          إصلاح تصدير PDF على Android، وقراءة الشعار والخطوط المدمجة بصورة صحيحة. اختبار فعلي لمشاركة PDF وصورة الإحصائيات على Android 10 و15 و16.
+          ربط Google Drive باختيار حساب الهاتف دون Client ID في واجهة Android؛ تفعيل OAuth Android وDrive API من مالك المشروع مطلوب كما توضح docs/GOOGLE-DRIVE-SETUP.md.
+          أيقونة Android شفافة، وإصلاح إظهار أخطاء البداية، ومنع النسخ التلقائي لبيانات التطبيق واتصالات HTTP غير المشفرة، وتحسين حماية CSV والنسخ الاحتياطية.
+          **توقيع خاص جديد:** صدّر JSON واحفظه خارج التطبيق، ثم احذف النسخة القديمة وثبت هذه النسخة واسترجع JSON. مفاتيح AI تحتاج إدخالها من جديد؛ لا تدخل في النسخ الاحتياطية. التحديثات التالية بنفس المفتاح الخاص لا تتطلب حذف التطبيق.
+          | النسخة | الحجم |
+          | --- | --- |
+          '''+'\n'.join(rows)+'''
+          TypeScript و21 اختبارًا و18/18 فحص Expo وبناء النسختين واختبارات التشغيل والتصدير على APIs 29/35/36 نجحت. لم يُجرَ اختبار حي لحساب Google أو لهاتف Xiaomi/البصمة. مراجعة الاعتماديات ما زالت تتضمن ثلاث مكتبات بناء بلا تحديث أمني؛ راجع docs/QA-1.2.3.md، ولا تعتبر هذا شهادة بخلو التطبيق من كل الثغرات.
+          '''+'\nSource: '+os.environ['SOURCE_SHA']+'\nBuild: https://github.com/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+os.environ['SOURCE_RUN']+'\n'
+          (dst/'H0sS-Money-1.2.3-Report.md').write_text('\n'.join(x.strip() for x in note.splitlines())+'\n')
+          PY
+      - name: Publish complete public release
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v1.2.3" >/dev/null 2>&1; then echo 'Release exists; refusing overwrite.'; exit 1; fi
+          gh release create v1.2.3 --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --draft --title 'H0sS-Money 1.2.3' --notes-file delivery/H0sS-Money-1.2.3-Report.md delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.2.3-Report.md delivery/H0sS-Money-1.2.3-UI-QA.zip
+          gh release edit v1.2.3 --repo "$GITHUB_REPOSITORY" --draft=false --latest

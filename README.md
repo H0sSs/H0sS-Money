@@ -18,17 +18,19 @@
 <table>
   <tr>
     <th align="center">الرئيسية والتسجيل</th>
-    <th align="center">الإحصائيات والتقارير</th>
+    <th align="center">الإيرادات والمصروفات</th>
     <th align="center">المظهر والحماية</th>
   </tr>
   <tr>
     <td align="center"><img src="docs/images/home.png" width="240" alt="الرئيسية مع زر التسجيل الصوتي" /></td>
-    <td align="center"><img src="docs/images/statistics.png" width="240" alt="إجمالي الإنفاق والرسم البياني" /></td>
+    <td align="center"><img src="docs/images/ledger.png" width="240" alt="الإيرادات والمصروفات وصافي الدخل" /></td>
     <td align="center"><img src="docs/images/appearance.png" width="240" alt="خيارات المظهر والقفل في الوضع الفاتح" /></td>
   </tr>
 </table>
 
-<sub>صور فعلية من الإصدار 1.2.3؛ صور 1.2.4 تُحدّث بعد اختبار APK على محاكي Android، باستخدام بيانات تجريبية.</sub>
+<p align="center"><img src="docs/images/startup.png" width="280" alt="شعار البداية بخلفية واحدة" /></p>
+
+<sub>صور فعلية من الإصدار 1.2.4 على محاكي Android، باستخدام بيانات تجريبية.</sub>
 
 ## كل ما تحتاجه لمتابعة أموالك
 
@@ -67,17 +69,26 @@
 | **OpenAI** | ✓ | ✓ |
 | **Z.ai · GLM-5** | عبر Gemini أو OpenAI | ✓ |
 
-عند اختيار Gemini للصوت والتحليل معًا، يستخدم التسجيل **طلبًا واحدًا**. الصوت يحتاج الإنترنت ومفتاحًا صالحًا وحصة متاحة لدى المزوّد. راجع النص والأصناف قبل الحفظ؛ نتائج الذكاء الاصطناعي قد تحتاج تصحيحًا أو إضافة صنف مفقود.
+عند اختيار Gemini للصوت والتحليل معًا، يستخدم التسجيل **طلبًا واحدًا**. الصوت يحتاج الإنترنت ومفتاحًا صالحًا وحصة ووصولًا للنموذج لدى المزوّد. يستخدم هذا الإصدار `gemini-2.5-flash`؛ [Google تقصر عائلة 2.5 على المستخدمين الذين استخدموها سابقًا](https://ai.google.dev/gemini-api/docs/deprecations)، ولذلك المفتاح الجديد وحده لا يضمن الوصول. راجع النص والأصناف قبل الحفظ؛ نتائج الذكاء الاصطناعي قد تحتاج تصحيحًا أو إضافة صنف مفقود.
 
 ## التحميل والتحديث
 
 **ARM64** أصغر حجمًا للأجهزة التي تدعم `arm64-v8a`. **النسخة الشاملة** تدعم أيضًا `armeabi-v7a` و`x86` و`x86_64`. النسختان تقدمان الميزات نفسها.
 
-إصدار 1.2.4 قيد البناء والتحقق؛ يُنشر APK بعد نجاح اختبارات أندرويد والتوقيع الخاص. نسخ 1.2.2 والأقدم تستخدم شهادة تطوير عامة.
+**الإصدار العام الحالي: 1.2.4 — بتوقيع خاص.**
+
+| النسخة | الحجم | التحميل |
+| --- | --- | --- |
+| ARM64 | 31.67 MB | [تنزيل APK](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.4/H0sS-Money-1.2.4-arm64.apk) |
+| الشاملة | 88.78 MB | [تنزيل APK](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.4/H0sS-Money-1.2.4-universal.apk) |
+
+[صفحة الإصدار](https://github.com/H0sSs/H0sS-Money/releases/tag/v1.2.4) · [بصمات الملفات](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.4/SHA256SUMS.txt)
+
+نسخ 1.2.2 والأقدم تستخدم شهادة تطوير عامة.
 
 **الانتقال من 1.2.2 أو أقدم إلى التوقيع الخاص:** صدّر JSON واحفظه خارج التطبيق، ثم احذف النسخة القديمة وثبّت الجديدة واسترجع JSON. مفاتيح AI تحتاج إدخالها من جديد. التحديثات التالية بنفس التوقيع لا تتطلب حذف التطبيق.
 
-[تفاصيل إصدار 1.2.4](docs/RELEASE-1.2.4.md) · [عينة PDF فعلية](docs/report-sample-1.2.3.pdf)
+[تفاصيل إصدار 1.2.4](docs/RELEASE-1.2.4.md) · [نتائج التحقق](docs/QA-1.2.4.md) · [عينة PDF فعلية](docs/report-sample-1.2.4.pdf)
 
 <details>
 <summary><strong>البيانات والخصوصية</strong></summary>
@@ -99,7 +110,7 @@ npm run check
 npm run android
 ```
 
-المتطلبات: Node.js 24 وJava 17 وAndroid SDK للبناء الأصلي.
+المتطلبات: Node.js 24 وJava 17 وAndroid SDK للبناء الأصلي. يحتفظ `scripts/rebundle-apks.py` بمكتبات وموارد APK المبني عند إجراء إصلاح JavaScript فقط، ويتطلب مفتاح التوقيع الخاص وإعداد نسختي APK صراحةً؛ لا يُستخدم لتغيير النسخة الأصلية أو إضافة مكتبات Native.
 
 [إرشادات المساهمة](CONTRIBUTING.md) · [تفاصيل الإصدار](docs/RELEASE-1.2.4.md) · [مراجعة الاعتماديات](docs/DEPENDENCY-REVIEW.md) · [إعداد Google Drive والتوقيع](docs/GOOGLE-DRIVE-SETUP.md)
 

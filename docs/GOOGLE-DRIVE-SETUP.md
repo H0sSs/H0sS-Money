@@ -13,6 +13,6 @@ The project does not currently have proof that this OAuth registration is active
 
 References: https://react-native-google-signin.github.io/docs/original and https://developers.google.com/identity/protocols/oauth2/native-app
 
-## Private release publication without recompilation
+## Private release publication
 
-Configure the four signing secrets from your private signing kit at https://github.com/H0sSs/H0sS-Money/settings/secrets/actions, then run **Publish private-signed 1.2.3 without rebuilding** from Actions. The workflow reuses the verified 1.2.3 APK artifacts, verifies their hashes/source/native checks, signs them with the private certificate, checks package/version/alignment and publishes a complete release. It refuses publication with missing secrets or the old public development certificate. The current GitHub connection cannot manage repository Secrets; these must be configured by the owner.
+Version 1.2.4 is publicly available and signed with the owner private certificate. The four HOSS signing Secrets have been verified by an actual successful build. Subsequent releases use **Validate and build release APK**, which publishes only after private-certificate verification and all native smoke/export checks pass. Update the app version/versionCode and workflow artifact/tag names for each new version. No signing key or password belongs in this repository.

@@ -3,19 +3,18 @@
   <br /><br />
   <strong>إدارة مالية يومية، بواجهة عربية واضحة.</strong>
   <p>سجّل مصروفاتك، تابع دخلك وحساباتك، وافهم أين تذهب أموالك.</p>
-  <a href="https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.1/H0sS-Money-1.2.1-arm64.apk"><img src="https://img.shields.io/badge/تحميل_ARM64-31.50_MB-168B7D?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="تحميل APK ARM64" /></a>
-  <a href="https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.1/H0sS-Money-1.2.1-universal.apk"><img src="https://img.shields.io/badge/النسخة_الشاملة-88.61_MB-18333F?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="تحميل APK الشامل" /></a>
+  <a href="https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.1/H0sS-Money-1.2.1-arm64.apk"><img src="docs/images/download-arm64.svg" alt="تحميل APK ARM64" /></a>
+  <a href="https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.1/H0sS-Money-1.2.1-universal.apk"><img src="docs/images/download-universal.svg" alt="تحميل APK الشامل" /></a>
   <br /><br />
-  <a href="#preview">صور التطبيق</a> &nbsp; · &nbsp;
-  <a href="#features">الميزات</a> &nbsp; · &nbsp;
-  <a href="#start">البداية</a> &nbsp; · &nbsp;
+  <a href="#من-داخل-التطبيق">صور التطبيق</a> &nbsp; · &nbsp;
+  <a href="#كل-ما-تحتاجه-لمتابعة-أموالك">الميزات</a> &nbsp; · &nbsp;
+  <a href="#ابدأ-في-أربع-خطوات">البداية</a> &nbsp; · &nbsp;
   <a href="https://github.com/H0sSs/H0sS-Money/archive/refs/heads/main.zip">تحميل السورس</a>
   <p><sub>الإصدار 1.2.1 &nbsp; | &nbsp; Android 7+ &nbsp; | &nbsp; واجهة عربية &nbsp; | &nbsp; وضع فاتح وداكن</sub></p>
 </div>
 
 ---
 
-<a id="preview"></a>
 ## من داخل التطبيق
 
 <table>
@@ -33,7 +32,6 @@
 
 <sub>صور فعلية من الإصدار الحالي على محاكي Android، باستخدام بيانات تجريبية.</sub>
 
-<a id="features"></a>
 ## كل ما تحتاجه لمتابعة أموالك
 
 ### تسجيل أسهل، ومراجعة أوضح
@@ -52,7 +50,6 @@
 
 اختر الوضع الفاتح أو الداكن وشعارك داخل التطبيق. فعّل قفل البصمة أو رمز الجهاز، واحتفظ بنسخة JSON أو ارفع نسخة يدويًا إلى Google Drive.
 
-<a id="start"></a>
 ## ابدأ في أربع خطوات
 
 | الخطوة | ما تفعله |

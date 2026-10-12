@@ -4,6 +4,7 @@ mkdir -p smoke
 APK=$(find output -maxdepth 1 -name "H0sS-Money-*-universal.apk" -print -quit)
 [ -n "$APK" ] || { echo "Universal APK missing"; exit 1; }
 adb install -r "$APK"
+bash scripts/build-export-receiver.sh
 adb logcat -c
 adb shell screenrecord --time-limit 8 --bit-rate 2000000 /sdcard/startup.mp4 >smoke/startup-recording.txt 2>&1 &
 RECORD_PID=$!
@@ -26,5 +27,10 @@ adb logcat -d > smoke/logcat.txt
 adb shell pidof com.hossmoney.app > smoke/pid.txt
 if grep -E 'FATAL EXCEPTION|ReactNativeJS.*(TypeError|ReferenceError|Invariant Violation|Error:)' smoke/logcat.txt; then
   echo 'Startup error detected'; exit 1
+fi
+if [ "$STATUS" -eq 0 ]; then
+  adb pull /sdcard/Android/data/com.hossmoney.exportqa/files/report.pdf smoke/report.pdf
+  adb pull /sdcard/Android/data/com.hossmoney.exportqa/files/stats.png smoke/export-stats.png
+  python3 scripts/check-native-exports.py
 fi
 exit "$STATUS"

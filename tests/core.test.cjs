@@ -44,6 +44,7 @@ test('Arabic amounts, CSV escaping and HTML escaping',()=>{
  assert.equal(validation.numericInput('١٢٫٥٠'),12.5); assert.equal(validation.validAmount(-2),false);
  assert.equal(validation.csvCell('قال "أهلا"'),'"قال ""أهلا"""');
  assert.equal(validation.csvCell('=SUM(A1)'),'"\'=SUM(A1)"');
+ assert.equal(validation.csvCell('  =HYPERLINK("https://evil.example")').startsWith('"\''),true);
  assert.equal(validation.escapeHtml('<b>&'),'&lt;b&gt;&amp;');
 });
 test('AI output preserves valid amounts and rejects hallucinated categories',()=>{

@@ -2,7 +2,7 @@
   "expo": {
     "name": "H0sS-Money",
     "slug": "hoss-money",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hossmoney",
@@ -25,7 +25,7 @@
     "android": {
       "package": "com.hossmoney.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/splash-icon.png",
         "backgroundColor": "#102D39"
       },
       "edgeToEdgeEnabled": true,
@@ -36,7 +36,9 @@
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "versionCode": 5
+      "versionCode": 6,
+      "allowBackup": false,
+      "icon": "./assets/images/launcher-icon.png"
     },
     "plugins": [
       "expo-router",
@@ -96,7 +98,8 @@
             "backgroundColor": "#102D39"
           }
         }
-      ]
+      ],
+      "./plugins/withPrivateRelease"
     ],
     "experiments": {
       "typedRoutes": false,

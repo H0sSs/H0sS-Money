@@ -1,4 +1,5 @@
 import { Text, TextInput } from "@/components/Typography";
+import Constants from "expo-constants";
 import BackupStatus from "@/components/BackupStatus";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -37,7 +38,6 @@ import {
   connectDrive,
   clearDriveAuth,
   uploadBackupToDrive,
-  getDriveRedirectUri,
   listDriveBackups,
   restoreFromDriveFile,
   deleteDriveBackup,
@@ -496,7 +496,7 @@ export default function AdminScreen() {
   const logoUri = settings?.logoBase64 || settings?.logoUri || null;
   if(panel==='home')return <View style={[s.container,{backgroundColor:colors.background,paddingTop:insets.top}]}><ScrollView contentContainerStyle={{paddingBottom:tabBarHeight+20}}><PageHeader title="الإعدادات" subtitle="اختر القسم الذي تريد إدارته" icon="settings"/>
    {[{title:'الأموال',rows:[['الحسابات والأرصدة','accounts','credit-card'],['الدخل','income','trending-up'],['الديون والسداد','debts','users'],['المصاريف المتكررة','recurring','repeat']]},{title:'التطبيق',rows:[['الميزانيات والفئات','money','tag'],['الذكاء الاصطناعي','ai','cpu'],['النسخ والبيانات','backup','database'],['المظهر والأمان','settings','shield']]}].map(group=><View key={group.title} style={{paddingHorizontal:16,marginBottom:16}}><Text style={{color:colors.textSecondary,fontFamily:'ArabicBold',textAlign:'right',marginBottom:10}}>{group.title}</Text><View style={{borderRadius:18,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border}}>{group.rows.map(([label,id,icon],i)=><Pressable key={id} onPress={()=>router.push({pathname:['accounts','income','debts','recurring'].includes(id)?'/finance':'/settings',params:['accounts','income','debts','recurring'].includes(id)?{section:id}:{panel:id}})} style={{flexDirection:'row',alignItems:'center',gap:12,padding:16,borderTopWidth:i?1:0,borderColor:colors.border}}><Icon name="chevron-left" size={18} color={colors.textSecondary}/><Text style={{flex:1,textAlign:'right',color:colors.text,fontFamily:'ArabicBold'}}>{label}</Text><Icon name={icon} size={20} color={colors.primary}/></Pressable>)}</View></View>)}
-   <Text style={{color:colors.textSecondary,textAlign:'center',fontFamily:'ArabicRegular',fontSize:12}}>H0sS-Money 1.2.0 · بياناتك محفوظة محليًا</Text>
+   <Text style={{color:colors.textSecondary,textAlign:'center',fontFamily:'ArabicRegular',fontSize:12}}>H0sS-Money {Constants.expoConfig?.version ?? '1.2.3'} · بياناتك محفوظة محليًا</Text>
   </ScrollView></View>;
 
 
@@ -655,47 +655,35 @@ export default function AdminScreen() {
         {/* Google Drive Backup */}
         <Text style={[s.sec, { color: colors.primary }]}>نسخ Google Drive</Text>
         <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          {!settings?.driveAccessToken ? (
+          {!settings?.driveAccessToken && !settings?.driveNativeAuth ? (
             <>
-              <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 8, lineHeight: 18 }}>
-                اربط Google Drive لحفظ نسخة احتياطية يدويًا. أدخل Web Client ID، وأنشئ عميل Android باسم الحزمة وبصمة SHA-1 الموجودة مع ملفات البناء.
+              <Text style={{ color: colors.textSecondary, fontSize: 13, fontFamily: "ArabicRegular", marginBottom: 12, lineHeight: 22 }}>
+                اختر حساب Google الموجود على هاتفك ووافق على حفظ نسخ التطبيق. التطبيق يطلب الوصول للملفات التي ينشئها فقط.
               </Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 8, fontFamily: "ArabicRegular" }}>
-                إعداد Android في Google Cloud:{"\n"}
-                <Text style={{ color: colors.primary, fontFamily: "ArabicRegular" }}>{getDriveRedirectUri()}</Text>
-              </Text>
-              <TextInput
-                style={[s.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text, marginBottom: 10 }]}
-                placeholder="Google OAuth Client ID"
-                placeholderTextColor={colors.textSecondary}
-                value={googleClientId}
-                onChangeText={setGoogleClientId}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+              {Platform.OS !== "android" && <TextInput style={[s.input, {backgroundColor:colors.surfaceAlt,borderColor:colors.border,color:colors.text,marginBottom:10}]} placeholder="Google OAuth Client ID" value={googleClientId} onChangeText={setGoogleClientId} autoCapitalize="none" autoCorrect={false}/>}
               <Pressable
                 style={[s.keyBtn, { backgroundColor: colors.primary, marginBottom: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }]}
+                disabled={driveLoading}
                 onPress={async () => {
                   const cid = googleClientId.trim();
-                  if (!cid) { Alert.alert("تنبيه", "أدخل Client ID أولاً"); return; }
+                  if (Platform.OS !== "android" && !cid) { Alert.alert("تنبيه", "أدخل Client ID أولاً"); return; }
                   let ok = false;
-                  try { ok = await connectDrive(cid); } catch (error) { Alert.alert("خطأ", error instanceof Error ? error.message : "فشل الربط"); return; }
+                  setDriveLoading(true);
+                  try { ok = await connectDrive(cid); } catch (error) { Alert.alert("ربط Google", error instanceof Error ? error.message : "فشل الربط"); return; } finally { setDriveLoading(false); }
                   if (ok) {
                     Alert.alert("✓", "تم الربط بنجاح");
                     queryClient.invalidateQueries({ queryKey: ["settings"] });
-                  } else {
-                    Alert.alert("خطأ", "فشل ربط Google Drive");
                   }
                 }}
               >
                 <Icon name="link" size={15} color={colors.background} />
-                <Text style={{ color: colors.buttonText, fontFamily: "ArabicBold", fontSize: 13 }}>ربط Google Drive</Text>
+                <Text style={{ color: colors.buttonText, fontFamily: "ArabicBold", fontSize: 13 }}>{driveLoading ? "جارٍ الربط..." : "الربط بحساب Google"}</Text>
               </Pressable>
             </>
           ) : (
             <>
               <View style={{ marginBottom: 12 }}>
-                <Text style={{ color: colors.text, fontSize: 14, fontFamily: "ArabicBold" }}>متصل ✓</Text>
+                <Text style={{ color: colors.text, fontSize: 14, fontFamily: "ArabicBold" }}>متصل ✓ {settings.driveAccountEmail ?? ""}</Text>
                 {settings.driveLastBackupAt && (
                   <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, fontFamily: "ArabicRegular" }}>
                     آخر نسخة: {new Date(Number(settings.driveLastBackupAt)).toLocaleString("ar-EG")}

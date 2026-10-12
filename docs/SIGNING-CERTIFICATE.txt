@@ -1,0 +1,4 @@
+Package: com.hossmoney.app
+Alias: hoss-money
+sha1 Fingerprint=90:A7:D1:02:D0:7C:0E:36:2F:39:A8:98:B3:3B:B6:46:8C:8C:16:17
+sha256 Fingerprint=89:67:C4:33:F0:4F:9E:28:79:F8:8A:95:F9:2C:95:D2:68:31:61:63:D8:4D:B3:44:2E:F2:21:F4:15:FA:E9:1C

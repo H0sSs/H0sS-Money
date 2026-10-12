@@ -1,4 +1,4 @@
-# Dependency review — 2026-10-10
+# Dependency review — 2026-10-12
 
 `npm audit --omit=dev` initially reported 44 entries (25 high, 19 moderate). Entries include parent packages affected by the same underlying advisory; they are not 44 independent flaws.
 

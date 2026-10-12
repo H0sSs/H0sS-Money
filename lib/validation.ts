@@ -8,7 +8,7 @@ export function validAmount(value: number): boolean {
 
 export function csvCell(value: unknown): string {
   let text = String(value ?? "");
-  if (/^[=+@\-\t\r]/.test(text)) text = `'${text}`;
+  if (/^[=+@\-\t\r\n]/.test(text) || /^[\s\uFEFF]+[=+@\-]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
 

@@ -218,7 +218,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ErrorBoundary>
+      <ErrorBoundary onError={revealFirstFrame}>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider initialTheme={initialTheme}>
             <View style={{flex:1,backgroundColor:initialTheme==='light'?LightColors.background:DarkColors.background}} onLayout={revealFirstFrame}><ThemedNavigator /></View>

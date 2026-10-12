@@ -4,7 +4,16 @@ async function encoded(module: number) {
   const asset = Asset.fromModule(module);
   await asset.downloadAsync();
   if (!asset.localUri) throw new Error('تعذر تحميل موارد التقرير');
-  return FileSystem.readAsStringAsync(asset.localUri, {encoding:FileSystem.EncodingType.Base64});
+  // Release Android assets can be bare raw/drawable resource names. Base64
+  // reading only accepts file/content/asset URIs; copyAsync supports resources.
+  const uri = asset.localUri;
+  if (/^(file|content|asset):/.test(uri)) {
+    return FileSystem.readAsStringAsync(uri, {encoding:FileSystem.EncodingType.Base64});
+  }
+  if (!FileSystem.cacheDirectory) throw new Error('تعذر تجهيز موارد التقرير');
+  const target = `${FileSystem.cacheDirectory}report-${asset.hash ?? asset.name}.${asset.type}`;
+  await FileSystem.copyAsync({from:uri,to:target});
+  return FileSystem.readAsStringAsync(target, {encoding:FileSystem.EncodingType.Base64});
 }
 export async function reportAssets(customLogo?:string|null) {
   const [logo,font,boldFont] = await Promise.all([

@@ -45,6 +45,7 @@ export type Settings = {
   driveTokenExpiresAt: string | null;
   driveAutoBackup: boolean;
   driveNativeAuth: boolean;
+  driveAccountEmail: string | null;
   driveLastBackupAt: string | null;
 };
 
@@ -449,6 +450,7 @@ export async function getSettings(): Promise<Settings> {
     driveTokenExpiresAt: map.driveTokenExpiresAt || null,
     driveAutoBackup: map.driveAutoBackup === "true",
     driveNativeAuth: map.driveNativeAuth === "true",
+    driveAccountEmail: map.driveAccountEmail || null,
     driveLastBackupAt: map.driveLastBackupAt || null,
   };
 }
@@ -462,6 +464,7 @@ const SENSITIVE_SETTING_KEYS = new Set([
   "driveLastBackupAt",
   "driveAutoBackup",
   "driveNativeAuth",
+  "driveAccountEmail",
   "googleClientId",
   "logoUri",
 ]);
@@ -479,6 +482,7 @@ export async function exportBackup(): Promise<string> {
 }
 
 export async function importBackup(json: string, mode: "merge" | "replace"): Promise<{ categories: number; expenses: number }> {
+  if (json.length > 50 * 1024 * 1024) throw new Error("النسخة الاحتياطية تتجاوز الحجم المدعوم (50 MB)");
   const data = JSON.parse(json);
   if (!data || ![1, 2, 3].includes(data.version) || !Array.isArray(data.expenses) || !Array.isArray(data.categories)) throw new Error("ملف النسخة الاحتياطية غير صالح أو إصداره غير مدعوم");
   validateFinanceBackup(data);

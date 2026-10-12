@@ -123,6 +123,14 @@ for label,name in [('الإحصائيات','stats'),('المصاريف','expense
     tap(label)
     screenshot(name)
     if name=='stats':
+        for action,name_out in [('تصدير تقرير PDF','pdf'),('تصدير الإحصائيات صورة','image')]:
+            tap(action)
+            time.sleep(5)
+            screenshot('export-'+name_out+'-chooser')
+            tap('Export QA')
+            tap('Just once',optional=True)
+            time.sleep(3)
+            assert 'خطأ' not in [n.get('text','') for n in nodes()], 'Export failed'
         scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison'); scroll_body(); screenshot('stats-comparison-full'); assert any('لا يوجد إنفاق سابق لحساب النسبة' in n.get('text','') for n in nodes()), 'Zero baseline comparison fabricated a percentage'
 for label,name in [('الحسابات والأرصدة','accounts'),('الدخل','income'),('الديون والسداد','debts'),('المصاريف المتكررة','recurring')]:
     tap(label)
@@ -135,6 +143,10 @@ for label,name in [('الحسابات والأرصدة','accounts'),('الدخل
         assert any('QA_salary' in n.get('text','') for n in nodes()),'Income not saved'
         screenshot('income-saved')
     tap('رجوع')
+tap_scroll('النسخ والبيانات')
+screenshot('backup-account-link')
+assert not any('Client ID' in n.get('text','') for n in nodes()), 'Android backup exposes developer configuration'
+tap('رجوع للإعدادات')
 tap_scroll('المظهر والأمان')
 screenshot('settings')
 # First switch in preferences is the theme toggle.
@@ -154,4 +166,4 @@ adb('shell','am','start','-W','-n','com.hossmoney.app/.MainActivity')
 time.sleep(8)
 assert any('39.50' in n.get('text','') for n in nodes()), 'Batch expenses did not survive restart'
 screenshot('restart-persistence')
-Path('smoke/result.txt').write_text('PASS: cold launch, single and multi-item expenses plus income, refreshed batch total, four tabs and financial pages, dark/light switch, restart persistence.\n')
+Path('smoke/result.txt').write_text('PASS: cold launch, single and multi-item expenses plus income, refreshed batch total, native PDF/image sharing, simple Google account link UI, four tabs and financial pages, dark/light switch, restart persistence.\n')

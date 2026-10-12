@@ -1,9 +1,10 @@
 import { Text } from "@/components/Typography";
 import { useRouter } from "expo-router";
+import {getProfile} from "@/lib/profile";
 import PageHeader from "@/components/PageHeader";
 import { localDate, parseDate } from "@/lib/dates";
 import React, { useState, useRef } from "react";
-import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform } from "react-native";
+import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import Animated, {
@@ -177,6 +178,7 @@ function WeeklySummaryCard({ colors }: { colors: any }) {
 // ─── Home Screen ──────────────────────────────────────────────
 export default function HomeScreen() {
   const router=useRouter();
+  const {data:profile}=useQuery({queryKey:["profile"],queryFn:getProfile});
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
@@ -308,6 +310,7 @@ export default function HomeScreen() {
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }} showsVerticalScrollIndicator={false}>
         <PageHeader title="مصروفك تحت السيطرة" subtitle={today_label} icon="home" logo={settings?.logoBase64 || settings?.logoUri} />
+        {!!profile?.name&&<Pressable onPress={()=>router.push('/profile')} style={{marginHorizontal:18,marginBottom:14,flexDirection:'row',alignItems:'center',gap:12,padding:12,borderRadius:16,backgroundColor:colors.surface}}>{!!profile.photo&&<Image source={{uri:profile.photo}} style={{width:44,height:44,borderRadius:22}}/>}<Text style={{color:colors.text,fontFamily:'ArabicBold',flex:1,textAlign:'right'}}>أهلًا، {profile.name}</Text></Pressable>}
 
         <TodaySummary colors={colors} />
         <View style={{flexDirection:'row',gap:8,marginHorizontal:16,marginBottom:12}}>{[{label:'الحسابات',section:'accounts'},{label:'الإيرادات والمصروفات',section:'ledger'}].map(x=><Pressable key={x.section} onPress={()=>router.push({pathname:'/finance',params:{section:x.section}})} style={{flex:1,padding:12,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:12}}><Text style={{color:colors.primary,textAlign:'center',fontFamily:'ArabicBold'}}>{x.label}</Text></Pressable>)}</View>

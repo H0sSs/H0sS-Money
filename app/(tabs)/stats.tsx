@@ -409,27 +409,7 @@ export default function StatsScreen() {
     }
   };
 
-  const shareAsPdf = async () => {
-    if (exportInFlight.current || !stats || isLoading || compareLoading) return;
-    exportInFlight.current = true;
-    try {
-      setExporting("pdf");
-      const [expenses, incomes, accounts, assets] = await Promise.all([
-        getExpenses({startDate:range.start,endDate:range.end}), getIncomes(), getAccounts(),
-        reportAssets(settings?.logoBase64),
-      ]);
-      const html = buildStatsReport({start:range.start,end:range.end,label:periodLabel,currency,days:dayCount,
-        stats, compare, expenses, incomes:incomes.filter(x=>x.date>=range.start&&x.date<=range.end), accounts,...assets});
-      const { uri } = await Print.printToFileAsync({ html, width:595, height:842 });
-      const can = await Sharing.isAvailableAsync();
-      if (can) await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "تقرير H0sS-Money PDF" });
-    } catch (e) {
-      Alert.alert("خطأ", e instanceof Error ? e.message : "فشل التصدير");
-    } finally {
-      exportInFlight.current = false;
-      setExporting(null);
-    }
-  };
+  const shareAsPdf = () => router.push({pathname:'/reports',params:{start:range.start,end:range.end}});
 
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>

@@ -136,12 +136,18 @@ for label,name in [('الإحصائيات','stats'),('المصاريف','expense
     if name=='stats':
         for action,name_out in [('تصدير تقرير PDF','pdf'),('تصدير الإحصائيات صورة','image')]:
             tap(action)
+            if name_out=='pdf':
+                tap_scroll('تجهيز التقرير ومراجعة الإجماليات')
+                screenshot('full-report-summary')
+                tap_scroll('تصدير PDF')
             time.sleep(5)
             screenshot('export-'+name_out+'-chooser')
             tap('Export QA')
             tap('Just once',optional=True)
             time.sleep(3)
             assert 'خطأ' not in [n.get('text','') for n in nodes()], 'Export failed'
+            if name_out=='pdf':
+                adb('shell','input','keyevent','4');time.sleep(2)
         scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison'); scroll_body(); screenshot('stats-comparison-full'); assert any('لا يوجد إنفاق سابق لحساب النسبة' in n.get('text','') for n in nodes()), 'Zero baseline comparison fabricated a percentage'
 for label,name in [('الحسابات والأرصدة','accounts'),('الدخل','income'),('الديون والسداد','debts'),('المصاريف المتكررة','recurring')]:
     tap(label)
@@ -196,6 +202,34 @@ tap_scroll('النسخ والبيانات')
 screenshot('backup-account-link')
 assert not any('Client ID' in n.get('text','') for n in nodes()), 'Android backup exposes developer configuration'
 tap('رجوع للإعدادات')
+tap_scroll('ملفي الشخصي')
+fill_field('اسمك','QA_Owner')
+fill_field('رقم الهاتف','01012345678')
+fill_field('البريد الإلكتروني','qa@example.test')
+fill_field('بيانات إضافية','QA_ProfileDetails')
+tap_scroll('حفظ الملف الشخصي')
+tap('OK',optional=True);tap('حسنًا',optional=True)
+screenshot('profile-saved')
+adb('shell','input','keyevent','4');time.sleep(2)
+tap_scroll('دليل الاستخدام')
+tap_scroll('التسجيل بالصوت ومراجعة التصنيف')
+screenshot('guide-voice')
+adb('shell','input','keyevent','4');time.sleep(2)
+tap_scroll('فحص البيانات والتراجع')
+tap_scroll('فحص اتساق البيانات')
+assert any('نجح الفحص' in n.get('text','') for n in nodes()),'Data integrity failed'
+screenshot('integrity-check')
+adb('shell','input','keyevent','4');time.sleep(2)
+tap_scroll('التقرير المالي الشامل')
+tap_scroll('تجهيز التقرير ومراجعة الإجماليات')
+assert any('250.50' in n.get('text','') for n in nodes()),'Full report totals mismatch'
+screenshot('report-all-summary')
+tap_scroll('تصدير PDF');time.sleep(5)
+tap('Export QA');tap('Just once',optional=True);time.sleep(3)
+screenshot('report-exported')
+adb('shell','input','keyevent','4');time.sleep(2)
+# Restore the settings menu top before opening preferences.
+for _ in range(4):scroll_body(down=False)
 tap_scroll('المظهر والأمان')
 screenshot('settings')
 # First switch in preferences is the theme toggle.

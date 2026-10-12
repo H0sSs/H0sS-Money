@@ -1,0 +1,65 @@
+import {db} from './db';
+import {parseDate} from './dates';
+import {csvCell,escapeHtml as e} from './validation';
+import {type Profile,emptyProfile,validateProfile} from './profile';
+export const reportSections={ledger:'الإيرادات والمصروفات',categories:'الفئات والميزانيات',accounts:'الحسابات والأرصدة',debts:'الديون',payments:'السداد والتحصيل',transfers:'التحويلات',recurring:'المصاريف المتكررة'};
+export type ReportSection=keyof typeof reportSections;
+export type ReportFilter={start:string;end:string;accountIds:number[];sections:ReportSection[]};
+export type FullReport={filter:ReportFilter;currency:string;profile:Profile;createdAt:string;income:number;expense:number;rows:Record<ReportSection,Record<string,any>[]>};
+export async function getFullReport(filter:ReportFilter):Promise<FullReport>{
+ parseDate(filter.start);parseDate(filter.end);if(filter.start>filter.end)throw Error('بداية الفترة بعد نهايتها');
+ if(filter.sections.some(x=>!Object.hasOwn(reportSections,x))||!filter.sections.length)throw Error('اختر قسمًا واحدًا على الأقل');
+ if(filter.accountIds.some(x=>!Number.isSafeInteger(x)||x<=0))throw Error('اختيار الحساب غير صالح');
+ let result!:FullReport;
+ await db.withExclusiveTransactionAsync(async tx=>{
+  const settings=await tx.getAllAsync<{key:string;value:string}>('SELECT key,value FROM settings');const map=Object.fromEntries(settings.map(r=>[r.key,r.value]));
+  const accounts=await tx.getAllAsync<any>('SELECT * FROM accounts ORDER BY id');
+  if(filter.accountIds.some(id=>!accounts.some(a=>a.id===id)))throw Error('أحد الحسابات المختارة لم يعد موجودًا');
+  const selected=(id:number)=>!filter.accountIds.length||filter.accountIds.includes(id);
+  const name=(id:number)=>accounts.find(a=>a.id===id)?.name??'—';
+  const entries=await tx.getAllAsync<any>(`SELECT uid,amount,date,description,note,account_id,category_id,'expense' kind FROM expenses UNION ALL SELECT uid,amount,date,description,note,account_id,NULL,'income' FROM incomes ORDER BY date,uid`);
+  const transfers=await tx.getAllAsync<any>('SELECT * FROM transfers ORDER BY date,id');
+  const categories=await tx.getAllAsync<any>('SELECT * FROM categories ORDER BY id');
+  const payments=await tx.getAllAsync<any>('SELECT p.*,d.person,d.direction FROM debt_payments p JOIN debts d ON d.id=p.debt_id ORDER BY p.date,p.id');
+  const inPeriod=(date:string)=>date>=filter.start&&date<=filter.end;
+  const round=(n:number)=>Math.round(n*100);let incoming=0,outgoing=0,running=0;
+  const ledger=entries.filter(x=>inPeriod(x.date)&&selected(x.account_id)).map(x=>{const v=round(x.amount);if(x.kind==='income')incoming+=v;else outgoing+=v;running+=x.kind==='income'?v:-v;return {...x,account:name(x.account_id),category:categories.find(c=>c.id===x.category_id)?.name??'أخرى',income:x.kind==='income'?v/100:0,expense:x.kind==='expense'?v/100:0,net:running/100,kind:payments.some(p=>p.entry_uid===x.uid)?(x.kind==='income'?'collect':'repay'):x.kind};});
+  const accountRows=accounts.filter(a=>selected(a.id)).map(a=>{
+   const balance=(until:string,inclusive:boolean)=>{let c=round(a.opening_balance);for(const x of entries)if(x.account_id===a.id&&(inclusive?x.date<=until:x.date<until))c+=(x.kind==='income'?1:-1)*round(x.amount);for(const t of transfers)if(inclusive?t.date<=until:t.date<until){if(t.to_id===a.id)c+=round(t.amount);if(t.from_id===a.id)c-=round(t.amount);}return c/100;};
+   return {...a,before:balance(filter.start,false),closing:balance(filter.end,true)};
+  });
+  const debts=await tx.getAllAsync<any>('SELECT * FROM debts ORDER BY id');
+  const debtRows=debts.map(d=>{const paid=payments.filter(p=>p.debt_id===d.id&&p.date<=filter.end).reduce((sum,p)=>sum+round(p.amount),0)/100;return {...d,paid,remaining:(round(d.amount)-round(paid))/100};});
+  const categoryRows=categories.map(c=>{const total=ledger.filter(x=>x.kind!=='income'&&x.kind!=='collect'&&x.category_id===c.id).reduce((s,x)=>s+round(x.amount),0)/100;return {...c,total};});
+  const uncategorized=ledger.filter(x=>x.kind!=='income'&&x.kind!=='collect'&&x.category_id==null).reduce((sum,x)=>sum+round(x.amount),0)/100;
+  if(uncategorized)categoryRows.push({id:null,name:'غير مصنفة',total:uncategorized,budget:null});
+  const recurring=await tx.getAllAsync<any>('SELECT * FROM recurring ORDER BY next_date,id');
+  result={filter,currency:map.currency??'EGP',profile:map.personalProfile?validateProfile(JSON.parse(map.personalProfile)):{...emptyProfile},createdAt:new Date().toISOString(),income:incoming/100,expense:outgoing/100,rows:{ledger,categories:categoryRows,accounts:accountRows,debts:debtRows,payments:payments.filter(p=>inPeriod(p.date)&&selected(p.account_id)).map(p=>({...p,account:name(p.account_id)})),transfers:transfers.filter(t=>inPeriod(t.date)&&(!filter.accountIds.length||selected(t.from_id)||selected(t.to_id))).map(t=>({...t,from:name(t.from_id),to:name(t.to_id)})),recurring:recurring.filter(r=>selected(r.account_id)).map(r=>({...r,account:name(r.account_id),category:categories.find(c=>c.id===r.category_id)?.name??'أخرى'}))}};
+ });
+ return result;
+}
+const columns:Record<ReportSection,[string,string][]>={
+ ledger:[['date','التاريخ'],['description','الوصف'],['account','الحساب'],['category','الفئة'],['income','إيراد'],['expense','مصروف'],['net','صافي متراكم'],['note','ملاحظة']],
+ categories:[['name','الفئة'],['total','مصروف الفترة'],['budget','ميزانية شهرية']],
+ accounts:[['name','الحساب'],['opening_balance','افتتاحي مسجل'],['before','قبل الفترة'],['closing','نهاية الفترة']],
+ debts:[['person','الشخص'],['direction','الاتجاه'],['amount','أصل الدين'],['paid','المسدد حتى النهاية'],['remaining','المتبقي'],['note','ملاحظة']],
+ payments:[['date','التاريخ'],['person','الشخص'],['direction','النوع'],['amount','المبلغ'],['account','الحساب']],
+ transfers:[['date','التاريخ'],['from','من حساب'],['to','إلى حساب'],['amount','المبلغ'],['description','الوصف'],['note','ملاحظة']],
+ recurring:[['description','الوصف'],['amount','المبلغ'],['cadence','التكرار'],['next_date','الموعد التالي'],['account','الحساب'],['category','الفئة'],['enabled','الحالة']]
+};
+const moneyKeys=new Set(['income','expense','net','budget','total','opening_balance','before','closing','amount','paid','remaining']);
+function display(section:ReportSection,key:string,value:any){if(value==null)return '—';if(moneyKeys.has(key))return Number(value).toFixed(2);if(key==='direction')return section==='payments'?(value==='owing'?'سداد':'تحصيل'):(value==='owing'?'عليك':'لك');if(key==='cadence')return value==='monthly'?'شهري':'أسبوعي';if(key==='enabled')return value?'مفعّل':'متوقف';return String(value);}
+export function fullReportCSV(d:FullReport){const lines:string[]=[];lines.push(['H0sS-Money',d.filter.start,d.filter.end,d.currency].map(csvCell).join(','));for(const section of d.filter.sections){lines.push(csvCell(reportSections[section]),columns[section].map(x=>csvCell(x[1])).join(','));for(const row of d.rows[section])lines.push(columns[section].map(([key])=>csvCell(display(section,key,row[key]))).join(','));}return '\uFEFF'+lines.join('\r\n');}
+export function buildFullReport(d:FullReport,assets:{logo:string;font:string;boldFont:string}){
+ const summary=`<div class="metrics"><div>الإيرادات<strong>${d.income.toFixed(2)}</strong></div><div>المصروفات<strong>${d.expense.toFixed(2)}</strong></div><div>صافي الفترة<strong>${((Math.round(d.income*100)-Math.round(d.expense*100))/100).toFixed(2)}</strong></div></div>`;
+ const selected=d.filter.accountIds.length?d.rows.accounts.map(a=>a.name).join('، '):'جميع الحسابات';
+ const profile=d.profile.showInReports?`<div class="profile">${d.profile.photo?`<img src="${e(d.profile.photo)}"/>`:''}<div><b>${e(d.profile.name)}</b><p>${e(d.profile.phone)} ${e(d.profile.email)}</p><p>${e(d.profile.details)}</p></div></div>`:'';
+ const notes:Partial<Record<ReportSection,string>>={accounts:'الأرصدة حتى نهاية الفترة، وتشمل الرصيد الافتتاحي والتحويلات. الرصيد قبل الفترة يشمل العمليات السابقة فقط.',debts:'سجل الديون الحالي؛ أصل الدين لا يحمل تاريخ إنشاء في البيانات القديمة. المسدد محسوب حتى نهاية الفترة لجميع الحسابات. هذا القسم مستقل عن فلتر الحساب.',categories:'الميزانيات أهداف شهرية حالية، وليست حدودًا محسوبة للفترة المختارة. الفئات الحالية تظهر حتى إن لم تسجل مصروفات.',recurring:'قواعد التكرار الحالية ومواعيدها التالية؛ القاعدة ليست حركة نقدية جديدة، والعمليات المنشورة منها موجودة في المصروفات.',payments:'هذه العمليات موجودة بالفعل ضمن الإيرادات والمصروفات؛ لا تُضاف مرة ثانية للإجماليات.',transfers:'تحويلات داخلية، لا تدخل ضمن الإيرادات أو المصروفات. مع اختيار حساب تظهر التحويلات الواردة أو الصادرة له.'};
+ const pages:string[]=[];
+ pages.push(`<h1>تقريرك المالي الشامل</h1><p>من <bdi>${e(d.filter.start)}</bdi> إلى <bdi>${e(d.filter.end)}</bdi> · ${e(d.currency)}</p><p>الحسابات: ${e(selected)}</p>${profile}${summary}<div class="note">الصافي = الإيرادات − المصروفات المسجلة خلال الفترة. لا يشمل الرصيد الافتتاحي أو أصل الدين غير المسدد أو التحويلات الداخلية. السداد والتحصيل محسوبان مرة واحدة.</div><h2>محتويات التقرير</h2>${d.filter.sections.map(s=>`<p>${e(reportSections[s])} · ${d.rows[s].length} سجل</p>`).join('')}`);
+ for(const section of d.filter.sections){const cols=columns[section].filter(([key])=>key!=='note'&&key!=='description');const details=(row:Record<string,any>)=>columns[section].filter(([key])=>key==='note'||key==='description'||display(section,key,row[key]).length>75).filter(([key])=>row[key]);const groups:Record<string,any>[][]=[];let group:Record<string,any>[]=[],weight=0;
+  for(const row of d.rows[section]){const w=Math.max(2,...cols.map(([key])=>Math.ceil(Math.min(75,display(section,key,row[key]).length)/14)))+details(row).reduce((n,[key])=>n+1+Math.ceil(display(section,key,row[key]).length/85),0);if(weight+w>32&&group.length){groups.push(group);group=[];weight=0;}group.push(row);weight+=w;}if(group.length||!groups.length)groups.push(group);
+  for(const [i,chunk] of groups.entries())pages.push(`<h2>${e(reportSections[section])}${groups.length>1?` · ${i+1}/${groups.length}`:''}</h2><div class="note">${e(notes[section]??'كل العمليات ضمن الفترة والحسابات المختارة؛ الصافي المتراكم يبدأ من صفر عند بداية الفترة.')}</div><table><thead><tr>${cols.map(c=>`<th>${e(c[1])}</th>`).join('')}</tr></thead><tbody>${chunk.length?chunk.map(row=>`<tr>${cols.map(([key])=>`<td${moneyKeys.has(key)?' class="money"':''}>${e(display(section,key,row[key]).length>75?'التفاصيل أدناه':display(section,key,row[key]))}</td>`).join('')}</tr>${details(row).length?`<tr><td colspan="${cols.length}" class="details">${details(row).map(([key,label])=>`<b>${e(label)}:</b> ${e(display(section,key,row[key]))}`).join('<br/>')}</td></tr>`:''}`).join(''):`<tr><td colspan="${cols.length}" class="empty">لا توجد بيانات في هذا القسم</td></tr>`}</tbody></table>`);
+ }
+ return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>H0sS-Money</title><style>@font-face{font-family:Arabic;src:url(data:font/ttf;base64,${assets.font})}@font-face{font-family:Arabic;src:url(data:font/ttf;base64,${assets.boldFont});font-weight:700}@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arabic,sans-serif;color:#18333f;font-size:11px;line-height:1.6;margin:0}.page{break-after:page;position:relative}.page:last-child{break-after:auto}header{display:flex;align-items:center;border-bottom:2px solid #20aa97;padding:0 0 12px;margin-bottom:18px}header img{width:50px;height:50px;margin-left:12px}.brand{font-weight:700;color:#168b7d;font-size:18px;direction:ltr}h1{font-size:24px}h2{font-size:19px;margin:12px 0}.metrics{display:flex;margin:20px 0}.metrics div{flex:1;background:#edf7f5;padding:12px;border:1px solid #d5e8e3}.metrics strong{display:block;font-size:23px;direction:ltr}.note{padding:10px;background:#f1f6f8;color:#526672;margin:12px 0}.profile{display:flex;align-items:center;padding:14px;border:1px solid #d5e8e3}.profile img{width:64px;height:64px;object-fit:cover;border-radius:32px;margin-left:12px}.profile p{margin:4px 0;white-space:pre-wrap}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px}thead{display:table-header-group}th{background:#18333f;color:white}td,th{padding:7px 4px;border-bottom:1px solid #dce6ea;text-align:right;overflow-wrap:anywhere;white-space:pre-wrap;vertical-align:top}tbody tr:nth-child(even){background:#f3f8f8}tr{break-inside:avoid}.money{direction:ltr;text-align:center}.empty{text-align:center;padding:25px}footer{margin-top:18px;padding-top:8px;border-top:1px solid #dce6ea;color:#526672;font-size:9px;break-inside:avoid}</style></head><body>${pages.map((page,i)=>`<section class="page"><header><img src="${e(assets.logo)}"/><div><div class="brand">H0sS · MONEY</div><div>تقرير مالي · ${e(d.currency)}</div></div></header>${page}<footer>صفحة تقرير ${i+1} من ${pages.length} · ${e(d.createdAt.slice(0,10))}<br/>البيانات الشخصية تظهر بإذن صاحبها؛ بيانات مالية مسجلة دون تحويل بين العملات.</footer></section>`).join('')}</body></html>`;
+}

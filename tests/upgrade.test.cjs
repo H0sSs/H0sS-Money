@@ -36,7 +36,7 @@ function load(file){
 native.exec(`CREATE TABLE categories(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,icon TEXT NOT NULL,color TEXT NOT NULL,budget REAL,created_at TEXT DEFAULT (datetime('now')));CREATE TABLE expenses(id INTEGER PRIMARY KEY AUTOINCREMENT,amount REAL NOT NULL,description TEXT NOT NULL,category_id INTEGER REFERENCES categories(id),note TEXT,date TEXT NOT NULL,created_at TEXT DEFAULT (datetime('now')));CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT);INSERT INTO categories(id,name,icon,color) VALUES(1,'قهوة','coffee','#123456');INSERT INTO expenses(id,amount,description,category_id,date) VALUES(5,12.5,'قديم',1,'2026-10-11');INSERT INTO settings VALUES('theme','light');PRAGMA user_version=1;`);
 const databaseModule=load('lib/db.ts'),services=load('lib/services.ts'),finance=load('lib/finance.ts');
 test('upgrade of an existing v1 installation preserves money, categories, preference and stable identity',async()=>{
- await databaseModule.initDB();assert.equal(native.prepare('PRAGMA user_version').get().user_version,4);
+ await databaseModule.initDB();assert.equal(native.prepare('PRAGMA user_version').get().user_version,5);
  const old=(await services.getExpenses())[0];assert.equal(old.id,5);assert.equal(old.amount,12.5);assert.equal(old.category.name,'قهوة');assert.ok(old.uid);assert.ok(old.account_id);
  assert.equal((await services.getSettings()).theme,'light');assert.equal((await finance.getAccounts())[0].balance,-12.5);
  const backup=await services.exportBackup();await services.importBackup(backup,'replace');const restored=(await services.getExpenses())[0];assert.equal(restored.uid,old.uid);assert.equal(restored.amount,12.5);assert.equal((await finance.getAccounts())[0].balance,-12.5);

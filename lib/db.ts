@@ -13,7 +13,6 @@ const DEFAULT_CATEGORIES = [
   { name: "سجاير", icon: "wind", color: "#6B7280" },
   { name: "تعليم", icon: "book", color: "#F59E0B" },
   { name: "بنزين", icon: "zap", color: "#F59E0B" },
-  { name: "حشيش", icon: "star", color: "#EF4444" },
   { name: "أخرى", icon: "more-horizontal", color: "#9CA3AF" },
 ];
 
@@ -88,7 +87,8 @@ async function initialize() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_uid ON expenses(uid);
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
     CREATE INDEX IF NOT EXISTS idx_expenses_category_date ON expenses(category_id, date);
-    PRAGMA user_version = 4;
+    PRAGMA user_version = 5;
+    CREATE TABLE IF NOT EXISTS transaction_undo (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL, created_at TEXT NOT NULL);
   `);
   const count = await db.getFirstAsync<{ n: number }>(
     "SELECT COUNT(*) as n FROM categories"
@@ -101,4 +101,15 @@ async function initialize() {
       );
     }
   }
+  await db.withExclusiveTransactionAsync(async tx=>{ await removeRetiredCategory(tx); });
+}
+// Called on upgrade and after restoring an older backup. Preserve historical amounts.
+export async function removeRetiredCategory(tx: Pick<SQLite.SQLiteDatabase,'getFirstAsync'|'runAsync'>) {
+ const old=await tx.getFirstAsync<{id:number}>("SELECT id FROM categories WHERE trim(name)=?",['حشيش']);
+ if(!old)return;
+ let other=await tx.getFirstAsync<{id:number}>("SELECT id FROM categories WHERE name='أخرى' ORDER BY id LIMIT 1");
+ if(!other){const r=await tx.runAsync("INSERT INTO categories(name,icon,color) VALUES('أخرى','more-horizontal','#9CA3AF')");other={id:r.lastInsertRowId};}
+ await tx.runAsync("UPDATE expenses SET category_id=? WHERE category_id IN (SELECT id FROM categories WHERE trim(name)=?)",[other.id,'حشيش']);
+ await tx.runAsync("UPDATE recurring SET category_id=? WHERE category_id IN (SELECT id FROM categories WHERE trim(name)=?)",[other.id,'حشيش']);
+ await tx.runAsync("DELETE FROM categories WHERE trim(name)=?",['حشيش']);
 }

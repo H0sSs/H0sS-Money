@@ -5,7 +5,15 @@ import { quotaMessage } from "./aiErrors";
 export type AIProvider = "openai" | "gemini" | "zai";
 export type SpeechProvider = "openai" | "gemini";
 export type ParsedExpense = { amount: number | null; description: string; categoryName: string | null; note: string | null; transcript: string };
-const GEMINI_MODEL = "gemini-2.5-flash";
+export const defaultModels={gemini:'gemini-2.5-flash',openai:'gpt-4o-mini',zai:'glm-5',speech:'gpt-4o-mini-transcribe'};
+export type ModelRole=keyof typeof defaultModels;
+export async function getModel(role:ModelRole){return await SecureStore.getItemAsync(`ai_model_${role}`)||defaultModels[role];}
+export async function saveModel(role:ModelRole,value:string){const id=value.trim().replace(/^models\//,'');if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(id))throw Error('معرف النموذج غير صالح');await SecureStore.setItemAsync(`ai_model_${role}`,id);}
+export async function listGeminiModels(candidateKey?:string):Promise<string[]>{
+ const key=candidateKey?.trim()||await requireKey('gemini');const ids:string[]=[];let page='';
+ for(let i=0;i<10;i++){const data=await request('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000'+(page?'&pageToken='+encodeURIComponent(page):''),{headers:{'x-goog-api-key':key}});for(const m of data.models??[])if(m.supportedGenerationMethods?.includes('generateContent')&&m.name?.startsWith('models/gemini-')&&!/image|tts|robotics/i.test(m.name))ids.push(m.name.replace(/^models\//,''));if(!data.nextPageToken)break;page=data.nextPageToken;}
+ return [...new Set(ids)].sort();
+}
 export async function saveAPIKey(provider: AIProvider, key: string) {
   if (!key.trim()) throw new Error("أدخل المفتاح أولًا");
   await SecureStore.setItemAsync(`${provider}_api_key`, key.trim());
@@ -40,9 +48,10 @@ function geminiParts(data: any): string {
   return (data.candidates?.[0]?.content?.parts ?? []).filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("").trim();
 }
 async function gemini(key: string, parts: any[], json = false) {
-  const result = await request(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+  const model=await getModel("gemini");
+  const result = await request(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({ contents: [{ parts }], generationConfig: { thinkingConfig: { thinkingBudget: 0 }, ...(json ? { responseMimeType: "application/json" } : {}) } }),
+    body: JSON.stringify({ contents: [{ parts }], generationConfig: { ...(model==="gemini-2.5-flash"?{thinkingConfig:{thinkingBudget:0}}:{}), ...(json ? { responseMimeType: "application/json" } : {}) } }),
   });
   const text = geminiParts(result);
   if (!text) throw new Error("لم ترجع الخدمة نصًا؛ حاول بتسجيل أوضح");
@@ -51,7 +60,7 @@ async function gemini(key: string, parts: any[], json = false) {
 async function chat(provider: "openai" | "zai", key: string, system: string, user: string, json = false) {
   const data = await request(provider === "zai" ? "https://api.z.ai/api/paas/v4/chat/completions" : "https://api.openai.com/v1/chat/completions", {
     method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: provider === "zai" ? "glm-5" : "gpt-4o-mini", messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: json ? 4096 : 1024, ...(json ? { response_format: { type: "json_object" } } : {}), ...(provider === "zai" ? { thinking: { type: "disabled" } } : {}) }),
+    body: JSON.stringify({ model: await getModel(provider), messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: json ? 4096 : 1024, ...(json ? { response_format: { type: "json_object" } } : {}), ...(provider === "zai" && await getModel(provider)==="glm-5" ? { thinking: { type: "disabled" } } : {}) }),
   });
   const text = data.choices?.[0]?.message?.content;
   if (typeof text !== "string" || !text.trim()) throw new Error("الخدمة لم ترجع نتيجة؛ حاول مجددًا");
@@ -66,7 +75,7 @@ export async function transcribeAudio(uri: string, audioBase64: string, format: 
   const form = new FormData();
   // React Native requires a URI-backed file, not a browser Blob.
   form.append("file", { uri, type: mime, name: `expense.${format}` } as any);
-  form.append("model", "gpt-4o-mini-transcribe"); form.append("language", "ar");
+  form.append("model", await getModel("speech")); form.append("language", "ar");
   const data = await request("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form });
   if (!data.text?.trim()) throw new Error("لم أسمع كلامًا واضحًا؛ أعد التسجيل");
   return data.text.trim();

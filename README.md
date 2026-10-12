@@ -8,10 +8,20 @@
   <a href="#كل-ما-تحتاجه-لمتابعة-أموالك">الميزات</a> &nbsp; · &nbsp;
   <a href="#ابدأ-في-أربع-خطوات">البداية</a> &nbsp; · &nbsp;
   <a href="https://github.com/H0sSs/H0sS-Money/archive/refs/heads/main.zip">تحميل السورس</a>
-  <p><sub>السورس 1.2.4 &nbsp; | &nbsp; Android 7+ &nbsp; | &nbsp; واجهة عربية &nbsp; | &nbsp; وضع فاتح وداكن</sub></p>
+  <p><sub>السورس 1.2.5 &nbsp; | &nbsp; Android 7+ &nbsp; | &nbsp; واجهة عربية &nbsp; | &nbsp; وضع فاتح وداكن</sub></p>
 </div>
 
 ---
+
+## الجديد في هذا الإصدار
+
+- تقرير شامل متعدد الصفحات للفترة والحسابات والأقسام المختارة، مع معاينة وتصدير PDF وCSV.
+- ملف شخصي للاسم والبيانات والصورة، وظهور اختياري في التقرير. اسم التطبيق ثابت.
+- دليل استخدام عربي قابل للبحث من الإعدادات.
+- فحص اتساق البيانات والتراجع الآمن عن آخر قائمة محفوظة من الرئيسية، وتحذير العمليات المتشابهة قبل حفظها.
+- اختيار النموذج لكل مزود، وجلب قائمة Gemini بالمفتاح المحفوظ. الحصة ودعم الصوت يتحددان لدى المزود.
+- حذف الفئة المطلوبة مع حفظ عملياتها القديمة في «أخرى».
+
 
 ## من داخل التطبيق
 
@@ -30,7 +40,7 @@
 
 <p align="center"><img src="docs/images/startup.png" width="280" alt="شعار البداية بخلفية واحدة" /></p>
 
-<sub>صور فعلية من الإصدار 1.2.4 على محاكي Android، باستخدام بيانات تجريبية.</sub>
+<sub>صور فعلية من الإصدار 1.2.5 على محاكي Android، باستخدام بيانات تجريبية.</sub>
 
 ## كل ما تحتاجه لمتابعة أموالك
 
@@ -75,20 +85,20 @@
 
 **ARM64** أصغر حجمًا للأجهزة التي تدعم `arm64-v8a`. **النسخة الشاملة** تدعم أيضًا `armeabi-v7a` و`x86` و`x86_64`. النسختان تقدمان الميزات نفسها.
 
-**الإصدار العام الحالي: 1.2.4 — بتوقيع خاص.**
+**الإصدار العام الحالي: 1.2.5 — بتوقيع خاص.**
 
 | النسخة | الحجم | التحميل |
 | --- | --- | --- |
-| ARM64 | 31.67 MB | [تنزيل APK](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.4/H0sS-Money-1.2.4-arm64.apk) |
-| الشاملة | 88.78 MB | [تنزيل APK](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.4/H0sS-Money-1.2.4-universal.apk) |
+| ARM64 | حوالي 32 MB | [تنزيل APK](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.5/H0sS-Money-1.2.5-arm64.apk) |
+| الشاملة | حوالي 89 MB | [تنزيل APK](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.5/H0sS-Money-1.2.5-universal.apk) |
 
-[صفحة الإصدار](https://github.com/H0sSs/H0sS-Money/releases/tag/v1.2.4) · [بصمات الملفات](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.4/SHA256SUMS.txt)
+[صفحة الإصدار](https://github.com/H0sSs/H0sS-Money/releases/tag/v1.2.5) · [بصمات الملفات](https://github.com/H0sSs/H0sS-Money/releases/download/v1.2.5/SHA256SUMS.txt)
 
 نسخ 1.2.2 والأقدم تستخدم شهادة تطوير عامة.
 
 **الانتقال من 1.2.2 أو أقدم إلى التوقيع الخاص:** صدّر JSON واحفظه خارج التطبيق، ثم احذف النسخة القديمة وثبّت الجديدة واسترجع JSON. مفاتيح AI تحتاج إدخالها من جديد. التحديثات التالية بنفس التوقيع لا تتطلب حذف التطبيق.
 
-[تفاصيل إصدار 1.2.4](docs/RELEASE-1.2.4.md) · [نتائج التحقق](docs/QA-1.2.4.md) · [عينة PDF فعلية](docs/report-sample-1.2.4.pdf)
+[تفاصيل إصدار 1.2.5](docs/RELEASE-1.2.5.md) · [نتائج التحقق](docs/QA-1.2.5.md) · [عينة PDF فعلية](docs/report-sample-1.2.5.pdf)
 
 <details>
 <summary><strong>البيانات والخصوصية</strong></summary>
@@ -112,7 +122,7 @@ npm run android
 
 المتطلبات: Node.js 24 وJava 17 وAndroid SDK للبناء الأصلي. يحتفظ `scripts/rebundle-apks.py` بمكتبات وموارد APK المبني عند إجراء إصلاح JavaScript فقط، ويتطلب مفتاح التوقيع الخاص وإعداد نسختي APK صراحةً؛ لا يُستخدم لتغيير النسخة الأصلية أو إضافة مكتبات Native.
 
-[إرشادات المساهمة](CONTRIBUTING.md) · [تفاصيل الإصدار](docs/RELEASE-1.2.4.md) · [مراجعة الاعتماديات](docs/DEPENDENCY-REVIEW.md) · [إعداد Google Drive والتوقيع](docs/GOOGLE-DRIVE-SETUP.md)
+[إرشادات المساهمة](CONTRIBUTING.md) · [تفاصيل الإصدار](docs/RELEASE-1.2.5.md) · [مراجعة الاعتماديات](docs/DEPENDENCY-REVIEW.md) · [إعداد Google Drive والتوقيع](docs/GOOGLE-DRIVE-SETUP.md)
 
 </details>
 

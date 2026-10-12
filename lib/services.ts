@@ -4,7 +4,8 @@ import * as SecureStore from "expo-secure-store";
 import * as Crypto from "expo-crypto";
 import { numericInput, validAmount, csvCell } from "./validation";
 import { localDate, parseDate, monthRange } from "./dates";
-import { db } from "./db";
+import { validateProfile } from "./profile";
+import { db, removeRetiredCategory } from "./db";
 import { exportFinanceBackup, validateFinanceBackup, importFinanceBackup } from "./financeBackup";
 
 export type Category = {
@@ -499,15 +500,17 @@ export async function importBackup(json: string, mode: "merge" | "replace"): Pro
     if (e.uid != null && (typeof e.uid !== "string" || !e.uid || uids.has(e.uid))) throw new Error("معرّفات المصاريف غير صالحة");
     if (e.uid) uids.add(e.uid);
   }
-  const allowed = new Set(["currency", "theme", "fingerprintEnabled", "aiProvider", "speechProvider", "logoBase64", "monthlyGoal", "notificationsEnabled", "recurringAuto"]);
+  const allowed = new Set(["currency", "theme", "fingerprintEnabled", "aiProvider", "speechProvider", "logoBase64", "monthlyGoal", "notificationsEnabled", "recurringAuto", "personalProfile"]);
   const enums: Record<string, string[]> = { currency: ["EGP", "USD", "SAR"], theme: ["dark", "light"], fingerprintEnabled: ["true", "false"], notificationsEnabled: ["true", "false"], aiProvider: ["gemini", "openai", "zai"], speechProvider: ["gemini", "openai"], recurringAuto:["true","false"] };
   if (Array.isArray(data.settings)) for (const setting of data.settings) {
     if (!allowed.has(setting.key)) continue;
+    if(setting.key==="personalProfile"){validateProfile(JSON.parse(setting.value));continue;}
     if (typeof setting.value !== "string" || (enums[setting.key] && !enums[setting.key].includes(setting.value)) || (setting.key === "monthlyGoal" && setting.value !== "" && !validAmount(Number(setting.value))) || (setting.key === "logoBase64" && setting.value !== "" && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(setting.value))) throw new Error("إعدادات النسخة الاحتياطية غير صالحة");
   }
   let cCount = 0, eCount = 0;
   await db.withExclusiveTransactionAsync(async tx => {
     if (mode === "replace") await tx.execAsync("DELETE FROM expenses; DELETE FROM categories; DELETE FROM notification_log; DELETE FROM settings WHERE key NOT LIKE 'drive%' AND key != 'googleClientId';");
+    await tx.runAsync("DELETE FROM transaction_undo");
     const categoryMap = new Map<number, number>();
     for (const c of cats) {
       const existing = mode === "merge" ? await tx.getFirstAsync<{ id: number }>("SELECT id FROM categories WHERE name = ? AND icon = ? AND color = ? LIMIT 1", [c.name, c.icon ?? "tag", c.color ?? "#F0B429"]) : null;
@@ -531,6 +534,7 @@ export async function importBackup(json: string, mode: "merge" | "replace"): Pro
     if (Array.isArray(data.settings)) for (const setting of data.settings) {
       if (allowed.has(setting.key) && typeof setting.value === "string") await tx.runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [setting.key, setting.value]);
     }
+    await removeRetiredCategory(tx);
   });
   return { categories: cCount, expenses: eCount };
 }

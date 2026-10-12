@@ -2,9 +2,9 @@ from pathlib import Path
 from pypdf import PdfReader
 from PIL import Image
 p=Path('smoke/report.pdf');assert p.read_bytes().startswith(b'%PDF-'), 'Not a PDF'
-r=PdfReader(p);assert len(r.pages)==1, 'Small report produced an orphan/extra page'
+r=PdfReader(p);assert len(r.pages)>=8, 'Full report omitted sections'
 text='\n'.join(page.extract_text() or '' for page in r.pages)
-assert 'QA_' in text and '39.50' in text, 'Financial rows missing from exported PDF'
+assert all(name in text for name in ['QA_coffee','QA_bread','QA_bus','QA_salary','QA_mixed_income','QA_person']) and '49.50' in text and '250.50' in text, 'Financial rows missing from exported PDF'
 fonts=[];images=[]
 for page in r.pages:
  resources=page['/Resources']

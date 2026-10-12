@@ -17,8 +17,11 @@ export async function saveTransactions(items:TransactionInput[]) {
   parseDate(x.date);
   if((x.kind==='debt_owed'||x.kind==='debt_owing')&&!x.person?.trim())throw Error(`أدخل اسم صاحب الدين في العملية ${i+1}`);
  }
+ const saved: {table:string;row:Record<string,any>}[]=[];
  const notifications:{amount:number;date:string;category_id:number|null}[]=[];
  await db.withExclusiveTransactionAsync(async tx=>{
+  const before:Record<string,number>={};
+  for(const table of undoTables)before[table]=(await tx.getFirstAsync<{id:number}>(`SELECT COALESCE(MAX(id),0) id FROM ${table}`))!.id;
   for(const x of items){
    const value=cents(x.amount)/100;
    if(!validAmount(value))throw Error('المبلغ أقل من أصغر وحدة للعملة');
@@ -45,6 +48,8 @@ export async function saveTransactions(items:TransactionInput[]) {
     await tx.runAsync('INSERT INTO debt_payments(uid,debt_id,amount,date,account_id,entry_uid) VALUES(?,?,?,?,?,?)',[Crypto.randomUUID(),debt.id,value,x.date,x.accountId,uid]);
    }
   }
+  for(const table of undoTables)for(const row of await tx.getAllAsync<Record<string,any>>(`SELECT * FROM ${table} WHERE id>?`,[before[table]]))saved.push({table,row});
+  await tx.runAsync('INSERT OR REPLACE INTO transaction_undo(id,payload,created_at) VALUES(1,?,?)',[JSON.stringify(saved),new Date().toISOString()]);
  });
  // Budget notifications only after successful commit.
  if(notifications.length)import('./notifications').then(async m=>{for(const x of notifications)await m.checkAndNotify(x);}).catch(()=>{});
@@ -66,4 +71,35 @@ export async function getLedger(filter:LedgerFilter={}) {
  const page=Math.max(0,Math.floor(filter.page??0));
  const rows=await db.getAllAsync<LedgerRow>(cte+`, running AS (SELECT *,SUM(incoming-outgoing) OVER(ORDER BY date,uid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)/100.0 net FROM filtered) SELECT r.uid,r.date,r.description,a.name account,r.incoming/100.0 income,r.outgoing/100.0 expense,r.net,r.kind FROM running r LEFT JOIN accounts a ON a.id=r.account_id ORDER BY r.date,r.uid LIMIT 50 OFFSET ?`,[...args,page*50]);
  return {rows,income:totals?.income??0,expense:totals?.expense??0,net:cents((totals?.income??0)-(totals?.expense??0))/100,count:totals?.count??0,page};
+}
+
+const undoTables=['expenses','incomes','debts','debt_payments','transfers'] as const;
+export async function getLastRecording() { return db.getFirstAsync<{created_at:string;payload:string}>('SELECT * FROM transaction_undo WHERE id=1'); }
+export async function undoLastRecording(){
+ await db.withExclusiveTransactionAsync(async tx=>{
+  const batch=await tx.getFirstAsync<{payload:string}>('SELECT payload FROM transaction_undo WHERE id=1');
+  if(!batch)throw Error('لا توجد قائمة محفوظة من الرئيسية للتراجع عنها');
+  const entries:{table:string;row:Record<string,any>}[]=JSON.parse(batch.payload);
+  for(const x of entries){
+   if(!undoTables.includes(x.table as any))throw Error('سجل التراجع غير صالح');
+   const current=await tx.getFirstAsync<Record<string,any>>(`SELECT * FROM ${x.table} WHERE uid=?`,[x.row.uid]);
+   if(!current||Object.keys(x.row).some(k=>current[k]!==x.row[k]))throw Error('تم تعديل أو حذف بعض العمليات؛ التراجع متوقف لحماية بياناتك');
+   if(x.table==='debts'){
+    const payments=await tx.getAllAsync<{uid:string}>('SELECT uid FROM debt_payments WHERE debt_id=?',[x.row.id]);
+    if(payments.some(p=>!entries.some(e=>e.table==='debt_payments'&&e.row.uid===p.uid)))throw Error('تم سداد هذا الدين بعد التسجيل؛ احذف السداد أولًا');
+   }
+  }
+  for(const table of ['debt_payments','expenses','incomes','transfers','debts'])for(const x of entries.filter(e=>e.table===table))await tx.runAsync(`DELETE FROM ${table} WHERE uid=?`,[x.row.uid]);
+  await tx.runAsync('DELETE FROM transaction_undo');
+ });
+}
+export async function findSimilarTransactions(items:TransactionInput[]):Promise<string[]>{
+ const warnings:string[]=[];
+ for(const [i,x] of items.entries()){
+  const previous=items.slice(0,i).some(y=>y.kind===x.kind&&cents(y.amount)===cents(x.amount)&&y.date===x.date&&y.accountId===x.accountId&&y.description.trim()===x.description.trim()&&y.person===x.person&&y.debtId===x.debtId&&y.toAccountId===x.toAccountId);
+  const table=x.kind==='income'?'incomes':x.kind==='expense'?'expenses':null;
+  const match=table?await db.getFirstAsync(`SELECT id FROM ${table} WHERE ROUND(amount*100)=? AND date=? AND account_id=? AND trim(description)=? LIMIT 1`,[cents(x.amount),x.date,x.accountId,x.description.trim()]):null;
+  if(previous||match)warnings.push(`العملية ${i+1}: ${x.description} (${x.amount.toFixed(2)}) تشبه عملية ${previous?'في نفس القائمة':'مسجلة بالفعل'}`);
+ }
+ return warnings;
 }

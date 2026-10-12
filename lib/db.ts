@@ -77,6 +77,10 @@ async function initialize() {
     CREATE TABLE IF NOT EXISTS recurring (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, amount REAL NOT NULL CHECK(amount>0), description TEXT NOT NULL, category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL, account_id INTEGER NOT NULL REFERENCES accounts(id), next_date TEXT NOT NULL, cadence TEXT NOT NULL CHECK(cadence IN ('monthly','weekly')), anchor_day INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 1);
     CREATE INDEX IF NOT EXISTS idx_incomes_date ON incomes(date);
   `);
+  for (const [table, additions] of [['incomes',['note']],['transfers',['description','note']]] as const) {
+    const existing=await db.getAllAsync<{name:string}>(`PRAGMA table_info(${table})`);
+    for(const column of additions)if(!existing.some(c=>c.name===column))await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
+  }
   if (!columns.some(c => c.name === "account_id")) await db.execAsync("ALTER TABLE expenses ADD COLUMN account_id INTEGER REFERENCES accounts(id)");
   await db.execAsync("UPDATE expenses SET account_id=(SELECT id FROM accounts WHERE uid='default-cash') WHERE account_id IS NULL;");
   await db.execAsync(`
@@ -84,7 +88,7 @@ async function initialize() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_uid ON expenses(uid);
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
     CREATE INDEX IF NOT EXISTS idx_expenses_category_date ON expenses(category_id, date);
-    PRAGMA user_version = 3;
+    PRAGMA user_version = 4;
   `);
   const count = await db.getFirstAsync<{ n: number }>(
     "SELECT COUNT(*) as n FROM categories"

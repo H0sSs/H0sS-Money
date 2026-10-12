@@ -4,7 +4,7 @@ import { localDate, parseDate } from './dates';
 import { validAmount } from './validation';
 
 export type Account = { id: number; uid: string; name: string; opening_balance: number; balance: number };
-export type Income = { id: number; uid: string; amount: number; description: string; date: string; account_id: number };
+export type Income = { id: number; uid: string; amount: number; description: string; date: string; account_id: number; note:string };
 export type Debt = { id: number; uid: string; person: string; amount: number; direction: 'owed' | 'owing'; note: string; paid: number };
 export type Recurring = { id: number; uid: string; amount: number; description: string; category_id: number | null; account_id: number; next_date: string; cadence: 'monthly' | 'weekly'; anchor_day: number; enabled: number };
 const amount = (value: number) => { if (!validAmount(value)) throw Error('أدخل مبلغًا موجبًا صحيحًا'); };
@@ -31,9 +31,9 @@ export async function deleteAccount(id: number) {
  });
 }
 export async function getIncomes(): Promise<Income[]> { return db.getAllAsync<Income>('SELECT * FROM incomes ORDER BY date DESC,id DESC'); }
-export async function createIncome(value: number, description: string, date: string, accountId: number) {
- amount(value);parseDate(date);
- await db.runAsync('INSERT INTO incomes(uid,amount,description,date,account_id) VALUES(?,?,?,?,?)',[Crypto.randomUUID(),value,name(description),date,accountId]);
+export async function createIncome(value: number, description: string, date: string, accountId: number, note='') {
+ amount(value);parseDate(date);if(note.length>1000)throw Error('الملاحظة أطول من 1000 حرف');
+ await db.runAsync('INSERT INTO incomes(uid,amount,description,date,account_id,note) VALUES(?,?,?,?,?,?)',[Crypto.randomUUID(),value,name(description),date,accountId,note]);
 }
 export async function deleteIncome(id: number) {
  const linked=await db.getFirstAsync('SELECT p.id FROM debt_payments p JOIN incomes i ON i.uid=p.entry_uid WHERE i.id=?',[id]);
@@ -103,10 +103,10 @@ export async function postRecurring(today=localDate()) {
   }
  });return added;
 }
-export async function updateIncome(id:number,value:number,description:string,date:string,accountId:number) {
- amount(value);parseDate(date);
+export async function updateIncome(id:number,value:number,description:string,date:string,accountId:number,note='') {
+ amount(value);parseDate(date);if(note.length>1000)throw Error('الملاحظة أطول من 1000 حرف');
  if(await db.getFirstAsync('SELECT p.id FROM debt_payments p JOIN incomes i ON p.entry_uid=i.uid WHERE i.id=?',[id]))throw Error('عدّل تحصيل الدين من صفحة الديون');
- await db.runAsync('UPDATE incomes SET amount=?,description=?,date=?,account_id=? WHERE id=?',[value,name(description),date,accountId,id]);
+ await db.runAsync('UPDATE incomes SET amount=?,description=?,date=?,account_id=?,note=? WHERE id=?',[value,name(description),date,accountId,note,id]);
 }
 export async function updateDebt(id:number,person:string,value:number,note:string) {
  amount(value);await db.withExclusiveTransactionAsync(async tx=>{const paid=await tx.getFirstAsync<{paid:number}>('SELECT COALESCE(SUM(amount),0) paid FROM debt_payments WHERE debt_id=?',[id]);if(Math.round(value*100)<Math.round((paid?.paid??0)*100))throw Error('الأصل أقل من المبلغ المسدد');await tx.runAsync('UPDATE debts SET person=?,amount=?,note=? WHERE id=?',[name(person),value,note.slice(0,1000),id]);});
@@ -115,5 +115,5 @@ export async function updateRecurring(id:number,value:number,description:string,
  amount(value);const d=parseDate(date);if(!['weekly','monthly'].includes(cadence))throw Error('فترة غير صالحة');
  await db.runAsync('UPDATE recurring SET amount=?,description=?,next_date=?,cadence=?,anchor_day=?,account_id=?,category_id=? WHERE id=?',[value,name(description),date,cadence,d.getDate(),accountId,categoryId,id]);
 }
-export async function getTransfers(){return db.getAllAsync<{id:number;amount:number;date:string;from_id:number;to_id:number}>('SELECT * FROM transfers ORDER BY date DESC,id DESC');}
+export async function getTransfers(){return db.getAllAsync<{id:number;amount:number;date:string;from_id:number;to_id:number;description:string;note:string}>('SELECT * FROM transfers ORDER BY date DESC,id DESC');}
 export async function deleteTransfer(id:number){await db.runAsync('DELETE FROM transfers WHERE id=?',[id]);}

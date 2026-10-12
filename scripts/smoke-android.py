@@ -22,7 +22,7 @@ def tap(label, optional=False):
         values=[node.get('text',''),node.get('content-desc','')]
         if any(value==label or value.startswith(label+',') for value in values):
             coords=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
-            if len(coords)==4 and coords[2]>coords[0] and coords[3]>coords[1] and (coords[1]+coords[3])//2<safe_bottom:
+            if len(coords)==4 and coords[2]>coords[0] and coords[3]-coords[1]>=40 and coords[2]-coords[0]>=40 and coords[1]>=height*.08 and (coords[1]+coords[3])//2<safe_bottom-16:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
                 time.sleep(2)
                 return True
@@ -35,20 +35,31 @@ def tap_scroll(label):
         scroll_body()
     raise RuntimeError(f'Control not reachable after scrolling: {label}')
 
+def choose_kind(index,name):
+    label=f'نوع الصنف {index}: {name}'
+    for attempt in range(24):
+        if tap(label,optional=True):
+            found=next((n for n in nodes() if n.get('content-desc')==label),None)
+            if found is not None and found.get('selected')=='true':return
+        scroll_body(down=attempt<12)
+    screenshot('kind-selection-failed')
+    raise RuntimeError(f'Financial kind not selected: {label}')
+
 def fill_field(label,value):
-    for attempt in range(20):
+    for attempt in range(32):
         target=next((n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label),None)
         if target is not None:
             coords=list(map(int,re.findall(r'\d+',target.get('bounds',''))))
             height=int(re.findall(r'\d+x(\d+)',adb('shell','wm','size'))[-1])
-            if len(coords)==4 and coords[3]>coords[1] and height*.08<(coords[1]+coords[3])//2<height*.9:
+            if len(coords)==4 and coords[3]-coords[1]>=48 and height*.08<(coords[1]+coords[3])//2<height*.9:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
                 time.sleep(1);adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
                 entered=next(n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label)
                 assert entered.get('text')==value,f'Incorrect input: {label}'
                 return
-            scroll_body(down=not(len(coords)==4 and coords[2]>coords[0] and coords[3]>coords[1] and coords[3]<height*.2))
-        else:scroll_body(down=attempt<12)
+            has_bounds=len(coords)==4 and coords[2]>coords[0] and coords[3]>coords[1]
+            scroll_body(down=not(coords[3]<height*.2) if has_bounds else attempt<16)
+        else:scroll_body(down=attempt<16)
     raise RuntimeError(f'Input not found: {label}')
 
 def screenshot(name):
@@ -147,14 +158,15 @@ for label,name in [('الحسابات والأرصدة','accounts'),('الدخل
 tap('الرئيسية')
 scroll_body(down=False)
 tap_scroll('إضافة مصروف يدويًا')
-tap('نوع الصنف 1: إيراد')
+choose_kind(1,'إيراد')
 fill_field('مبلغ الصنف 1','200')
 fill_field('وصف الصنف 1','QA_mixed_income')
 tap_scroll('إضافة صنف آخر')
 fill_field('مبلغ الصنف 2','10')
 fill_field('وصف الصنف 2','QA_mixed_expense')
 tap_scroll('إضافة صنف آخر')
-tap_scroll('نوع الصنف 3: دين لك')
+choose_kind(3,'دين لك')
+screenshot('third-kind-selected')
 fill_field('اسم الشخص للصنف 3','QA_person')
 fill_field('مبلغ الصنف 3','50')
 fill_field('وصف الصنف 3','QA_mixed_debt')
@@ -169,7 +181,9 @@ screenshot('ledger-mixed')
 size=list(map(int,re.findall(r'(\d+)x(\d+)',adb('shell','wm','size'))[-1]))
 adb('shell','input','swipe',str(int(size[0]*.85)),str(int(size[1]*.72)),str(int(size[0]*.15)),str(int(size[1]*.72)),'400')
 time.sleep(1)
+scroll_body()
 screenshot('ledger-table')
+assert any('QA_mixed_income' in n.get('text','') for n in nodes()), 'Income row missing from ledger table'
 tap('رجوع')
 tap('الإعدادات')
 tap('الديون والسداد')
@@ -197,6 +211,6 @@ if switches:
 adb('shell','am','force-stop','com.hossmoney.app')
 adb('shell','am','start','-W','-n','com.hossmoney.app/.MainActivity')
 time.sleep(8)
-assert any('39.50' in n.get('text','') for n in nodes()), 'Batch expenses did not survive restart'
+assert any('49.50' in n.get('text','') for n in nodes()), 'Expense total after mixed save did not survive restart'
 screenshot('restart-persistence')
-Path('smoke/result.txt').write_text('PASS: cold launch, single and multi-item expenses plus income, refreshed batch total, native PDF/image sharing, simple Google account link UI, four tabs and financial pages, dark/light switch, restart persistence.\n')
+Path('smoke/result.txt').write_text('PASS: cold launch, single and mixed income/expense/debt recording, ledger net 250.50, refreshed expense total 49.50, native PDF/image sharing, simple Google account link UI, four tabs and financial pages, dark/light switch, restart persistence.\n')

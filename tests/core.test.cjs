@@ -245,3 +245,11 @@ test('voice debt collection links income to its payment and deleting payment res
  const income=(await finance.getIncomes()).find(i=>i.description==='تحصيل دين: collection-person');await assert.rejects(()=>finance.deleteIncome(income.id));
  const payment=(await finance.getDebtPayments(debt.id))[0];await finance.deleteDebtPayment(payment.id);assert.equal((await finance.getAccounts())[0].balance,before);assert.equal((await finance.getDebts()).find(d=>d.id===debt.id).paid,0);
 });
+test('financial voice notes and transfer descriptions survive migration, table display and backup/restore',async()=>{
+ const cash=(await finance.getAccounts())[0],bank=(await finance.getAccounts()).find(a=>a.name==='بنك'),date='2026-10-15';
+ await transactions.saveTransactions([{kind:'income',amount:1,description:'income-note-test',note:'receipt-42',date,accountId:cash.id},{kind:'transfer',amount:1,description:'transfer-description',note:'internal-note',date,accountId:cash.id,toAccountId:bank.id}]);
+ assert.equal((await finance.getIncomes()).find(i=>i.description==='income-note-test').note,'receipt-42');assert.equal((await finance.getTransfers())[0].note,'internal-note');
+ assert.ok((await transactions.getLedger({start:date,end:date})).rows.some(r=>r.description.includes('receipt-42')));
+ const file=await services.exportBackup();await services.importBackup(file,'replace');assert.equal((await finance.getIncomes()).find(i=>i.description==='income-note-test').note,'receipt-42');assert.equal((await finance.getTransfers()).find(t=>t.description==='transfer-description').note,'internal-note');
+ const legacy=JSON.parse(file);for(const i of legacy.finance.incomes)delete i.note;for(const t of legacy.finance.transfers){delete t.note;delete t.description;}await services.importBackup(JSON.stringify(legacy),'replace');assert.equal((await finance.getIncomes()).find(i=>i.description==='income-note-test').note,'');
+});

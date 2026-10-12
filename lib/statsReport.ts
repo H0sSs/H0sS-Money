@@ -3,7 +3,7 @@ import type { Expense, StatsResult, MonthCompareResult } from './services';
 export type ReportData = {
   start: string; end: string; label: string; currency: string; days: number;
   stats: StatsResult; compare?: MonthCompareResult; expenses: Expense[];
-  incomes: {amount:number;description:string;date:string;account_id:number}[];
+  incomes: {amount:number;description:string;date:string;account_id:number;note?:string}[];
   accounts: {id:number;name:string}[]; logo: string; font: string; boldFont: string;
 };
 export function buildStatsReport(d: ReportData): string {
@@ -13,7 +13,7 @@ export function buildStatsReport(d: ReportData): string {
   const rows = (items:string[],empty:string,cols=3) => items.join('') || `<tr><td colspan="${cols}" class="empty">${empty}</td></tr>`;
   const categoryRows = d.stats.byCategory.map(c=>`<tr><td>${e(c.name)}</td><td>${money(c.total)}</td><td>${d.stats.total>0?(c.total/d.stats.total*100).toFixed(1):'0.0'}%</td></tr>`);
   const expenses = d.expenses.map(x=>`<tr><td class="date">${e(x.date)}</td><td>${e(x.description)}</td><td>${e(x.category?.name??'غير مصنف')}</td><td>${account(x.account_id)}</td><td>${money(x.amount)}</td><td>${e(x.note??'—')}</td></tr>`);
-  const incomes = d.incomes.map(x=>`<tr><td class="date">${e(x.date)}</td><td>${e(x.description)}</td><td>${account(x.account_id)}</td><td>${money(x.amount)}</td></tr>`);
+  const incomes = d.incomes.map(x=>`<tr><td class="date">${e(x.date)}</td><td>${e(x.description)}${x.note?`<br/><span class="muted">${e(x.note)}</span>`:''}</td><td>${account(x.account_id)}</td><td>${money(x.amount)}</td></tr>`);
   const daily = d.stats.byDay.map(x=>`<tr><td class="date">${e(x.date)}</td><td>${money(x.total)}</td></tr>`);
   const compare = d.compare;
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير H0sS-Money</title><style>

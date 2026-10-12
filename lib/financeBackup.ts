@@ -12,6 +12,8 @@ export function validateFinanceBackup(data:any) {
  for(const t of tables){const ids=new Set(),uids=new Set();for(const r of f[t]){
   if(!Number.isSafeInteger(r.id)||r.id<=0||ids.has(r.id)||typeof r.uid!=='string'||!r.uid||uids.has(r.uid))throw Error('معرفات البيانات المالية غير صالحة');ids.add(r.id);uids.add(r.uid);
  }}
+ const optionalText=(v:any,max=1000)=>{if(v!==undefined&&(typeof v!=='string'||v.length>max))throw Error('ملاحظة أو وصف مالي غير صالح');};
+ for(const r of f.incomes)optionalText(r.note);for(const r of f.transfers){optionalText(r.note);optionalText(r.description,500);}
  const accounts=new Set(f.accounts.map((r:any)=>r.id)),cats=new Set(data.categories.map((r:any)=>r.id));
  const account=(id:any)=>{if(!accounts.has(id))throw Error('حساب مفقود في النسخة');};
  const text=(v:any)=>{if(typeof v!=='string'||!v.trim()||v.length>1000)throw Error('نص مالي غير صالح');};
@@ -36,8 +38,8 @@ export async function importFinanceBackup(tx:SQLiteDatabase,data:any,categories:
  const f=data.version===3?data.finance:null;const accounts=new Map<number,number>();const debts=new Map<number,number>();
  if(!f)return accounts;
  for(const a of f.accounts){await tx.runAsync('INSERT OR IGNORE INTO accounts(uid,name,opening_balance) VALUES(?,?,?)',[a.uid,a.name,a.opening_balance]);const id=(await tx.getFirstAsync<{id:number}>('SELECT id FROM accounts WHERE uid=?',[a.uid]))!.id;accounts.set(a.id,id);if(mode==='replace')await tx.runAsync('UPDATE accounts SET name=?,opening_balance=? WHERE id=?',[a.name,a.opening_balance,id]);}
- for(const i of f.incomes)await tx.runAsync('INSERT OR IGNORE INTO incomes(uid,amount,description,date,account_id) VALUES(?,?,?,?,?)',[i.uid,i.amount,i.description,i.date,accounts.get(i.account_id)!]);
- for(const t of f.transfers)await tx.runAsync('INSERT OR IGNORE INTO transfers(uid,amount,date,from_id,to_id) VALUES(?,?,?,?,?)',[t.uid,t.amount,t.date,accounts.get(t.from_id)!,accounts.get(t.to_id)!]);
+ for(const i of f.incomes)await tx.runAsync('INSERT OR IGNORE INTO incomes(uid,amount,description,date,account_id,note) VALUES(?,?,?,?,?,?)',[i.uid,i.amount,i.description,i.date,accounts.get(i.account_id)!,i.note??'']);
+ for(const t of f.transfers)await tx.runAsync('INSERT OR IGNORE INTO transfers(uid,amount,date,from_id,to_id,description,note) VALUES(?,?,?,?,?,?,?)',[t.uid,t.amount,t.date,accounts.get(t.from_id)!,accounts.get(t.to_id)!,t.description??'',t.note??'']);
  for(const d of f.debts){await tx.runAsync('INSERT OR IGNORE INTO debts(uid,person,amount,direction,note) VALUES(?,?,?,?,?)',[d.uid,d.person,d.amount,d.direction,d.note]);debts.set(d.id,(await tx.getFirstAsync<{id:number}>('SELECT id FROM debts WHERE uid=?',[d.uid]))!.id);}
  for(const p of f.debt_payments)await tx.runAsync('INSERT OR IGNORE INTO debt_payments(uid,debt_id,amount,date,account_id,entry_uid) VALUES(?,?,?,?,?,?)',[p.uid,debts.get(p.debt_id)!,p.amount,p.date,accounts.get(p.account_id)!,p.entry_uid]);
  for(const r of f.recurring)await tx.runAsync('INSERT OR IGNORE INTO recurring(uid,amount,description,category_id,account_id,next_date,cadence,anchor_day,enabled) VALUES(?,?,?,?,?,?,?,?,?)',[r.uid,r.amount,r.description,r.category_id==null?null:categories.get(r.category_id)!,accounts.get(r.account_id)!,r.next_date,r.cadence,r.anchor_day,r.enabled]);

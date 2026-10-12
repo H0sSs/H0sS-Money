@@ -2,7 +2,7 @@
   "expo": {
     "name": "H0sS-Money",
     "slug": "hoss-money",
-    "version": "1.2.3",
+    "version": "1.2.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hossmoney",
@@ -25,7 +25,7 @@
     "android": {
       "package": "com.hossmoney.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/splash-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#102D39"
       },
       "edgeToEdgeEnabled": true,
@@ -36,7 +36,7 @@
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "versionCode": 6,
+      "versionCode": 7,
       "allowBackup": false,
       "icon": "./assets/images/launcher-icon.png"
     },
@@ -94,12 +94,12 @@
           "imageWidth": 288,
           "backgroundColor": "#102D39",
           "dark": {
-            "image": "./assets/images/splash-icon.png",
             "backgroundColor": "#102D39"
           }
         }
       ],
-      "./plugins/withPrivateRelease"
+      "./plugins/withPrivateRelease",
+      "./plugins/withLaunchScreen"
     ],
     "experiments": {
       "typedRoutes": false,

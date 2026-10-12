@@ -7,12 +7,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { localDate, parseDate } from '@/lib/dates';
 import { numericInput } from '@/lib/validation';
-import { getCategories, getSettings, updateSetting } from '@/lib/services';
+import { getCategories, getSettings, updateSetting, createExpense } from '@/lib/services';
 import * as F from '@/lib/finance';
 import { db } from '@/lib/db';
 import PageHeader from './PageHeader';
 import Icon from './Icon';
-const titles:Record<string,string>={accounts:'الحسابات والأرصدة',income:'الدخل',debts:'الديون والسداد',recurring:'المصاريف المتكررة'};
+import Ledger from './Ledger';
+const titles:Record<string,string>={ledger:'الإيرادات والمصروفات',expense:'إضافة مصروف',accounts:'الحسابات والأرصدة',income:'الدخل',debts:'الديون والسداد',recurring:'المصاريف المتكررة'};
 export default function FinanceScreen(){
  const {section='accounts'}=useLocalSearchParams<{section:string}>();const current=titles[section]?section:'accounts';
  const {colors:c}=useTheme();const insets=useSafeAreaInsets();const router=useRouter();const client=useQueryClient();
@@ -41,17 +42,18 @@ export default function FinanceScreen(){
  async function save(){const n=numericInput(value);const a=selectedAccount;if(form!=='accounts'&&!a)throw Error('أضف حسابًا أولًا');
   if(form==='accounts'){if(target)await F.renameAccount(target.id,description);else await F.createAccount(description,n);}
   if(form==='income'){parseDate(date);if(target)await F.updateIncome(target.id,n,description,date,a);else await F.createIncome(n,description,date,a);}
+  if(form==='expense')await createExpense({amount:n,description,date,accountId:a,categoryId:category,note});
   if(form==='transfer')await F.transferMoney(n,a,to,date);
   if(form==='debts'){if(target)await F.updateDebt(target.id,description,n,note);else await F.createDebt(description,n,direction,note);}
   if(form==='pay')await F.payDebt(target.id,n,date,a);
   if(form==='recurring'){if(target)await F.updateRecurring(target.id,n,description,date,cadence,a,category);else await F.createRecurring(n,description,date,cadence,a,category);}
  }
- const hints:Record<string,string>={accounts:'الرصيد = الافتتاحي + الدخل − المصروفات + صافي التحويلات. كل الحسابات تستخدم عملة العرض نفسها.',income:'سجّل دخلك واختر الحساب المستلم. الدخل منفصل عن إحصائيات المصاريف.',debts:'تسجيل أصل الدين للتتبع فقط؛ لا يغيّر الرصيد. السداد يسجّل مصروفًا أو دخلًا حسب اتجاه الدين.',recurring:'المصروفات المستحقة تُسجّل عند فتح التطبيق إذا فعّلت التلقائي. لا يوجد تنفيذ أثناء إغلاق التطبيق.'};
+ const hints:Record<string,string>={ledger:'الإيرادات والمصروفات',expense:'إضافة مصروف',accounts:'الرصيد = الافتتاحي + الدخل − المصروفات + صافي التحويلات. كل الحسابات تستخدم عملة العرض نفسها.',income:'سجّل دخلك واختر الحساب المستلم. الدخل منفصل عن إحصائيات المصاريف.',debts:'تسجيل أصل الدين للتتبع فقط؛ لا يغيّر الرصيد. السداد يسجّل مصروفًا أو دخلًا حسب اتجاه الدين.',recurring:'المصروفات المستحقة تُسجّل عند فتح التطبيق إذا فعّلت التلقائي. لا يوجد تنفيذ أثناء إغلاق التطبيق.'};
  return <View style={{flex:1,paddingTop:insets.top,backgroundColor:c.background}}>
   <ScrollView contentContainerStyle={{paddingBottom:insets.bottom+24}} keyboardShouldPersistTaps="handled">
    <PageHeader title={titles[current]} subtitle={hints[current]} icon="credit-card" actions={<Pressable accessibilityLabel="رجوع" onPress={()=>router.back()} style={{padding:12}}><Icon name="arrow-left" size={22} color={c.text}/></Pressable>}/>
    <View style={{paddingHorizontal:16}}>
-    {button(current==='accounts'?'إضافة حساب':current==='income'?'إضافة دخل':current==='debts'?'إضافة دين':'إضافة مصروف متكرر',()=>open(current))}
+    {current==='ledger'?<Ledger accounts={accounts} currency={currency} onIncome={()=>open('income')} onExpense={()=>open('expense')}/>:button(current==='accounts'?'إضافة حساب':current==='income'?'إضافة دخل':current==='debts'?'إضافة دين':'إضافة مصروف متكرر',()=>open(current))}
     <View style={{height:14}}/>
     {current==='accounts'&&<>{button('تحويل بين الحسابات',()=>open('transfer'),true)}<View style={{height:12}}/>{accounts.map(a=><View key={a.id} style={card}><Text style={{...text,fontFamily:'ArabicBold'}}>{a.name}</Text><Text style={{...text,color:c.primary,fontSize:25,writingDirection:'ltr'}}>{a.balance.toFixed(2)} {currency}</Text><Text style={{...text,color:c.textSecondary}}>افتتاحي: {a.opening_balance.toFixed(2)}</Text><View style={{flexDirection:'row',gap:12}}>{button('تعديل الاسم',()=>open('accounts',a),true)}{a.uid!=='default-cash'&&button('حذف',()=>remove('حذف الحساب إذا لم يكن مرتبطًا بعمليات؟',()=>F.deleteAccount(a.id)),true)}</View></View>)}<Text style={{...text,fontFamily:'ArabicBold',marginBottom:12}}>التحويلات</Text>{transfers.map(t=><View key={t.id} style={card}><Text style={text}>{accounts.find(a=>a.id===t.from_id)?.name} ← {accounts.find(a=>a.id===t.to_id)?.name}</Text><Text style={text}>{t.date} · {t.amount.toFixed(2)} {currency}</Text>{button('حذف التحويل',()=>remove('حذف التحويل يعيد حساب رصيد الحسابين.',()=>F.deleteTransfer(t.id)),true)}</View>)}</>}
     {current==='income'&&<><Text style={{...text,color:c.primary,fontSize:22,marginBottom:12}}>إجمالي الدخل: {incomes.reduce((s,i)=>s+i.amount,0).toFixed(2)} {currency}</Text>{incomeLoading?<ActivityIndicator color={c.primary}/>:!incomes.length?<Text style={text}>لا يوجد دخل مسجّل. أضف أول عملية من الزر أعلاه.</Text>:incomes.map(i=><View key={i.id} style={card}><Text style={{...text,fontFamily:'ArabicBold'}}>{i.description}</Text><Text style={{...text,color:c.success}}>{i.amount.toFixed(2)} {currency}</Text><Text style={{...text,color:c.textSecondary}}>{i.date} · {accounts.find(a=>a.id===i.account_id)?.name}</Text><View style={{flexDirection:'row',gap:12}}>{button('تعديل',()=>open('income',i),true)}{button('حذف',()=>remove('حذف الدخل سيحدّث رصيد الحساب.',()=>F.deleteIncome(i.id)),true)}</View></View>)}</>}
@@ -66,9 +68,10 @@ export default function FinanceScreen(){
      {form!=='pay'&&form!=='transfer'&&field(form==='accounts'?'اسم الحساب':form==='debts'?'اسم الشخص':'الوصف',description,setDescription)}
      {!(form==='accounts'&&target)&&field(form==='accounts'?'الرصيد الافتتاحي':form==='pay'?'مبلغ السداد':'المبلغ',value,setValue,true)}
      {form!=='accounts'&&form!=='debts'&&field('التاريخ YYYY-MM-DD',date,setDate)}
-     {['income','pay','transfer','recurring'].includes(form??'')&&<><Text style={text}>الحساب</Text>{choices(accounts,selectedAccount,setAccount)}</>}
+     {['income','expense','pay','transfer','recurring'].includes(form??'')&&<><Text style={text}>الحساب</Text>{choices(accounts,selectedAccount,setAccount)}</>}
      {form==='transfer'&&<><Text style={text}>الحساب المستلم</Text>{choices(accounts,to,setTo)}</>}
      {form==='debts'&&<>{!target&&choices([{id:'owing',name:'دين عليك'},{id:'owed',name:'دين لك'}],direction,setDirection)}{field('ملاحظة',note,setNote)}</>}
+     {form==='expense'&&<><Text style={text}>الفئة</Text>{choices([{id:null,name:'بدون فئة'},...categories],category,setCategory)}{field('ملاحظة',note,setNote)}</>}
      {form==='recurring'&&<>{choices([{id:'monthly',name:'شهري'},{id:'weekly',name:'أسبوعي'}],cadence,setCadence)}<Text style={text}>الفئة</Text>{choices([{id:null,name:'بدون فئة'},...categories],category,setCategory)}</>}
      {form==='pay'&&<><Text style={text}>المتبقي: {target?Math.max(0,(debts.find(d=>d.id===target.id)?.amount??target.amount)-(debts.find(d=>d.id===target.id)?.paid??target.paid)).toFixed(2):'0'} {currency}</Text>{payments.map(p=><View key={p.id} style={card}><Text style={text}>{p.date} · {p.amount.toFixed(2)} {currency}</Text>{button('حذف السداد وتحديث الرصيد',()=>remove('سيُحذف أيضًا المصروف أو الدخل المرتبط.',()=>F.deleteDebtPayment(p.id)),true)}</View>)}</>}
      {busy?<ActivityIndicator color={c.primary}/>:button('حفظ',()=>run(save))}

@@ -193,3 +193,55 @@ test('PDF report escapes descriptions, includes every operation and scoped incom
  const html=report.buildStatsReport({start:'2026-10-01',end:'2026-10-12',label:'الشهر',currency:'EGP',days:12,logo:'data:image/png;base64,AA',font:'AA',boldFont:'AA',stats:{total:39.5,count:2,byDay:[{date:'2026-10-01',total:39.5}],byCategory:[{name:'أكل',total:39.5}]},expenses:[{date:'2026-10-01',amount:20,description:'<script>bad</script>'},{date:'2026-10-02',amount:19.5,description:'LAST-OPERATION',note:'تفاصيل'}],incomes:[{amount:100,date:'2026-10-03',description:'الراتب',account_id:1}],accounts:[{id:1,name:'نقدي'}]});
  assert.ok(html.includes('&lt;script&gt;bad&lt;/script&gt;'));assert.ok(!html.includes('<script>bad</script>'));assert.ok(html.includes('LAST-OPERATION'));assert.ok(html.includes('60.50'));assert.ok(html.includes('الراتب'));assert.ok(html.includes('font/ttf;base64'));assert.ok(html.includes('table-header-group'));
 });
+const transactions=load('lib/transactions.ts');
+test('financial voice validator preserves income, expense, both debt directions and repayments without guessing uncertain types',()=>{
+ const raw=JSON.stringify({transactions:[{kind:'income',amount:'١٠٠٠',description:'راتب'},{kind:'expense',amount:20,description:'قهوة',categoryName:'أكل'},{kind:'debt_owing',amount:200,description:'دين',person:'أحمد'},{kind:'debt_owed',amount:90,description:'دين',person:'سارة'},{kind:'repay',amount:50,person:'أحمد'},{kind:'collect',amount:10,person:'سارة'},{kind:'invented',amount:null,description:'غير واضح'}]});
+ const result=ai.validateParsedTransactions(raw,'كل التسجيل',[{name:'أكل'}]);
+ assert.deepEqual(Array.from(result,r=>r.kind),['income','expense','debt_owing','debt_owed','repay','collect','unknown']);assert.equal(result[0].amount,1000);assert.equal(result[2].person,'أحمد');assert.equal(result[6].amount,null);
+ assert.throws(()=>ai.validateParsedTransactions('{"transactions":[null]}','نص',[]));assert.throws(()=>ai.validateParsedTransactions('{"transactions":[]}','نص',[]));
+});
+test('all six provider combinations route a mixed financial recording and Gemini keeps one request',async()=>{
+ const response={transcript:'قبضت ألف واشتريت قهوة بعشرين وعليا لأحمد ميتين',transactions:[{kind:'income',amount:1000,description:'دخل'},{kind:'expense',amount:20,description:'قهوة'},{kind:'debt_owing',amount:200,description:'دين',person:'أحمد'}]};
+ try{
+  for(const p of ['gemini','openai','zai'])await ai.saveAPIKey(p,'mock-key');
+  for(const speech of ['gemini','openai'])for(const provider of ['gemini','openai','zai']){
+   let calls=0;aiFetch=async(url,init)=>{calls++;if(url.includes('/audio/transcriptions'))return{ok:true,json:async()=>({text:response.transcript})};const b=JSON.parse(init.body);
+    if(speech==='gemini'&&provider!=='gemini'&&url.includes('generativelanguage'))return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:response.transcript}]}}]})};
+    const prompt=provider==='gemini'?b.contents[0].parts.find(x=>x.text).text:b.messages[0].content;
+    assert.ok(prompt.includes('debt_owed')&&prompt.includes('repay')&&prompt.includes('2026-10-12'));return{ok:true,json:async()=>provider==='gemini'?{candidates:[{content:{parts:[{text:JSON.stringify(response)}]}}]}:{choices:[{message:{content:JSON.stringify(response)}}]}};
+   };
+   const result=await ai.parseVoiceTransactions('AA==','m4a',provider,[],'file:///mock',speech,'2026-10-12');assert.deepEqual(Array.from(result,x=>x.kind),['income','expense','debt_owing']);assert.equal(calls,speech==='gemini'&&provider==='gemini'?1:2);
+  }
+ }finally{aiFetch=global.fetch;secure.clear();}
+});
+test('mixed recording commits correct tables, cents, balances and all-or-nothing debt payments',async()=>{
+ const cash=(await finance.getAccounts())[0],before=cash.balance,date='2026-10-12';
+ const common={date,accountId:cash.id};
+ await transactions.saveTransactions([{...common,kind:'income',amount:1000,description:'mixed-salary'},{...common,kind:'expense',amount:20,description:'mixed-coffee'},{...common,kind:'debt_owing',amount:200,description:'mixed-debt',person:'mixed-person'}]);
+ assert.equal((await finance.getAccounts())[0].balance,before+980);
+ const debt=(await finance.getDebts()).find(d=>d.person==='mixed-person');assert.equal(debt.amount,200);
+ const ledger=await transactions.getLedger({start:date,end:date,accountId:cash.id});assert.equal(ledger.income,1000);assert.equal(ledger.expense,20);assert.equal(ledger.net,980);assert.equal(ledger.count,2);
+ await assert.rejects(()=>transactions.saveTransactions([{...common,kind:'income',amount:50,description:'rollback-income'},{...common,kind:'repay',amount:201,description:'bad',debtId:debt.id}]));
+ assert.ok(!(await finance.getIncomes()).some(i=>i.description==='rollback-income'));assert.equal((await finance.getDebts()).find(d=>d.id===debt.id).paid,0);
+ await transactions.saveTransactions([{...common,kind:'repay',amount:50,description:'سداد',debtId:debt.id}]);assert.equal((await finance.getDebts()).find(d=>d.id===debt.id).paid,50);assert.equal((await finance.getAccounts())[0].balance,before+930);
+ await assert.rejects(()=>transactions.saveTransactions([{...common,kind:'collect',amount:1,description:'wrong direction',debtId:debt.id}]));
+ await assert.rejects(()=>transactions.saveTransactions([{...common,kind:'unknown',amount:1,description:'unknown'}]));
+ await assert.rejects(()=>transactions.saveTransactions([{...common,kind:'debt_owed',amount:1,description:'missing person'}]));
+});
+test('ledger pagination and date/account filters retain totals and running net across pages; transfers never count as income',async()=>{
+ const cash=(await finance.getAccounts())[0],bank=(await finance.getAccounts()).find(a=>a.name==='بنك'),date='2026-10-13';
+ await transactions.saveTransactions(Array.from({length:50},(_,i)=>({kind:'income',amount:.10,description:'cent-'+i,date,accountId:cash.id})));
+ await transactions.saveTransactions([{kind:'expense',amount:.20,description:'cent-expense',date,accountId:cash.id},{kind:'transfer',amount:3,description:'internal transfer',date,accountId:cash.id,toAccountId:bank.id},{kind:'income',amount:7,description:'bank-income',date,accountId:bank.id}]);
+ const first=await transactions.getLedger({start:date,end:date,accountId:cash.id}),second=await transactions.getLedger({start:date,end:date,accountId:cash.id,page:1});
+ assert.equal(first.rows.length,50);assert.equal(second.rows.length,1);assert.equal(first.income,5);assert.equal(first.expense,.20);assert.equal(first.net,4.8);assert.equal(second.rows[0].net,4.8);assert.equal(second.count,51);assert.equal((await transactions.getLedger({start:date,end:date})).income,12);
+ await assert.rejects(()=>transactions.getLedger({start:'2026-10-14',end:date}));
+});
+test('voice debt collection links income to its payment and deleting payment restores cash and debt',async()=>{
+ const cash=(await finance.getAccounts())[0],before=cash.balance,date='2026-10-14';
+ await transactions.saveTransactions([{kind:'debt_owed',amount:60,description:'دين',person:'collection-person',date,accountId:cash.id}]);
+ const debt=(await finance.getDebts()).find(d=>d.person==='collection-person');
+ await transactions.saveTransactions([{kind:'collect',amount:30,description:'تحصيل',debtId:debt.id,date,accountId:cash.id}]);
+ assert.equal((await finance.getAccounts())[0].balance,before+30);assert.equal((await finance.getDebts()).find(d=>d.id===debt.id).paid,30);
+ const income=(await finance.getIncomes()).find(i=>i.description==='تحصيل دين: collection-person');await assert.rejects(()=>finance.deleteIncome(income.id));
+ const payment=(await finance.getDebtPayments(debt.id))[0];await finance.deleteDebtPayment(payment.id);assert.equal((await finance.getAccounts())[0].balance,before);assert.equal((await finance.getDebts()).find(d=>d.id===debt.id).paid,0);
+});

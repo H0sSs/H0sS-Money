@@ -76,6 +76,7 @@ jobs:
       - run: npx expo prebuild --platform android --clean --no-install
         env:
           CI: 'true'
+      - run: node scripts/check-launch-resources.cjs
       - name: Restore native compilation outputs
         uses: actions/cache@v4
         with:
@@ -109,8 +110,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p output
-          cp android/app/build/outputs/apk/release/app-release.apk output/H0sS-Money-1.2.3-${{ matrix.variant }}.apk
-          APK=output/H0sS-Money-1.2.3-${{ matrix.variant }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk output/H0sS-Money-1.2.4-${{ matrix.variant }}.apk
+          APK=output/H0sS-Money-1.2.4-${{ matrix.variant }}.apk
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" > output/signature.txt
           "$BUILD_TOOLS/aapt" dump badging "$APK" > output/package.txt
@@ -174,3 +175,58 @@ jobs:
           name: android-smoke-evidence-api-${{ matrix.api }}
           path: smoke/
           if-no-files-found: ignore
+
+  publish:
+    needs: [validate, build, smoke]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: H0sS-Money-release-*
+          path: downloads
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: android-smoke-evidence-api-*
+          path: qa
+      - name: Verify private signatures and collect release files
+        run: |
+          set -euo pipefail
+          mkdir -p delivery
+          for VARIANT in arm64 universal; do
+            DIR="downloads/H0sS-Money-release-$VARIANT"
+            grep -q 'Private H0sS-Money release certificate' "$DIR/SIGNING-NOTE.txt"
+            grep -q '8967c433f04f9e2879f88a95f92c95d268316163d84db3442ef221f415fae91c' "$DIR/signature.txt"
+            grep -q "versionName='1.2.4'" "$DIR/package.txt"
+            grep -q "versionCode='7'" "$DIR/package.txt"
+            APK="$DIR/H0sS-Money-1.2.4-$VARIANT.apk"
+            EXPECTED=$(awk '{print $1}' "$DIR/SHA256SUMS.txt")
+            ACTUAL=$(sha256sum "$APK" | awk '{print $1}')
+            [ "$EXPECTED" = "$ACTUAL" ]
+            cp "$APK" delivery/
+          done
+          for API in 29 35 36; do
+            grep -q '^PASS:' "qa/android-smoke-evidence-api-$API/result.txt"
+            grep -q '^PASS:' "qa/android-smoke-evidence-api-$API/exports-result.txt"
+          done
+          (cd delivery && sha256sum *.apk > SHA256SUMS.txt)
+          cp docs/RELEASE-1.2.4.md delivery/H0sS-Money-1.2.4-Report.md
+          printf '\nSource: %s\nBuild: https://github.com/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> delivery/H0sS-Money-1.2.4-Report.md
+          python3 - <<'PY'
+          import pathlib,zipfile
+          with zipfile.ZipFile('delivery/H0sS-Money-1.2.4-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as z:
+            for p in sorted(pathlib.Path('qa').rglob('*')):
+              if p.is_file() and p.suffix in ['.png','.pdf','.mp4','.xml','.txt'] and p.name!='logcat.txt':z.write(p,p.relative_to('qa'))
+          PY
+      - name: Publish verified APKs
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v1.2.4" >/dev/null 2>&1; then echo 'Release already exists; refusing overwrite.'; exit 1; fi
+          gh release create v1.2.4 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'H0sS-Money 1.2.4' --notes-file delivery/H0sS-Money-1.2.4-Report.md delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.2.4-Report.md delivery/H0sS-Money-1.2.4-UI-QA.zip
+          gh release edit v1.2.4 --repo "$GITHUB_REPOSITORY" --draft=false --latest

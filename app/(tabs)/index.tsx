@@ -31,15 +31,14 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   getExpenses,
   getStats,
-  createExpenses,
   getCategories,
   getSettings,
   getCategoryHint,
   getWeeklySummary,
 } from "@/lib/services";
 import ExpenseReview from "@/components/ExpenseReview";
-import type { ExpenseInput } from "@/lib/services";
-import { parseVoiceExpense, generateVoiceSummary, type ParsedExpense } from "@/lib/ai";
+import {saveTransactions,type TransactionInput} from "@/lib/transactions";
+import { parseVoiceTransactions, generateVoiceSummary, type ParsedTransaction } from "@/lib/ai";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -187,7 +186,7 @@ export default function HomeScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [parsedData, setParsedData] = useState<ParsedExpense[] | null>(null);
+  const [parsedData, setParsedData] = useState<ParsedTransaction[] | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
@@ -209,10 +208,10 @@ export default function HomeScreen() {
   const voiceInFlight = useRef(false);
   const saveInFlight = useRef(false);
   const createMutation = useMutation({
-    mutationFn: (data: ExpenseInput[]) => createExpenses(data),
+    mutationFn: (data: TransactionInput[]) => saveTransactions(data),
     onSettled: () => { saveInFlight.current = false; },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries();
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["monthCompare"] });
@@ -284,10 +283,10 @@ export default function HomeScreen() {
         encoding: FileSystem.EncodingType.Base64,
       });
       const provider = settings?.aiProvider ?? "gemini";
-      const result = await parseVoiceExpense(base64, ext, provider, categories, uri, settings?.speechProvider ?? "gemini");
+      const result = await parseVoiceTransactions(base64, ext, provider, categories, uri, settings?.speechProvider ?? "gemini",localDate());
       for (const item of result) {
         const hintId = await getCategoryHint(item.description);
-        if (hintId && !item.categoryName) item.categoryName = categories.find(c => c.id === hintId)?.name ?? null;
+        if (item.kind==='expense' && hintId && !item.categoryName) item.categoryName = categories.find(c => c.id === hintId)?.name ?? null;
       }
       setParsedData(result);
       setShowModal(true);
@@ -311,7 +310,7 @@ export default function HomeScreen() {
         <PageHeader title="مصروفك تحت السيطرة" subtitle={today_label} icon="home" logo={settings?.logoBase64 || settings?.logoUri} />
 
         <TodaySummary colors={colors} />
-        <View style={{flexDirection:'row',gap:8,marginHorizontal:16,marginBottom:12}}>{[{label:'الحسابات',section:'accounts'},{label:'إضافة دخل',section:'income'}].map(x=><Pressable key={x.section} onPress={()=>router.push({pathname:'/finance',params:{section:x.section}})} style={{flex:1,padding:12,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:12}}><Text style={{color:colors.primary,textAlign:'center',fontFamily:'ArabicBold'}}>{x.label}</Text></Pressable>)}</View>
+        <View style={{flexDirection:'row',gap:8,marginHorizontal:16,marginBottom:12}}>{[{label:'الحسابات',section:'accounts'},{label:'الإيرادات والمصروفات',section:'ledger'}].map(x=><Pressable key={x.section} onPress={()=>router.push({pathname:'/finance',params:{section:x.section}})} style={{flex:1,padding:12,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:12}}><Text style={{color:colors.primary,textAlign:'center',fontFamily:'ArabicBold'}}>{x.label}</Text></Pressable>)}</View>
 
         <View style={[s.micSection, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 28, marginHorizontal: 16, marginBottom: 20 }]}>
           <Text style={[s.micHint, { color: colors.textSecondary }]}>
@@ -334,11 +333,11 @@ export default function HomeScreen() {
           </View>
 
           <Text style={[s.exampleText, { color: colors.textSecondary }]}>
-            مثال: "قهوة بـ20 ومواصلات بـ30 وخضار بـ100"
+            مثال: "قبضت 1000 وصرفت 20 وعليا لأحمد 200"
           </Text>
         </View>
 
-        <Pressable onPress={() => { setParsedData([{ amount: null, description: "", categoryName: null, note: null, transcript: "" }]); setShowModal(true); }} style={{ marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }}><Icon name="plus" size={18} color={colors.primary} /><Text style={{ color: colors.text, fontWeight: "700" }}>إضافة مصروف يدويًا</Text></Pressable>
+        <Pressable onPress={() => { setParsedData([{kind:'expense',person:null,date:null, amount: null, description: "", categoryName: null, note: null, transcript: "" }]); setShowModal(true); }} style={{ marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }}><Icon name="plus" size={18} color={colors.primary} /><Text style={{ color: colors.text, fontWeight: "700" }}>إضافة مصروف يدويًا</Text></Pressable>
         <WeeklySummaryCard colors={colors} />
 
         {monthlyGoal != null && monthlyGoal > 0 && (

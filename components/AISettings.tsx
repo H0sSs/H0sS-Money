@@ -1,5 +1,6 @@
+import { Text, TextInput } from "@/components/Typography";
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, Pressable, ActivityIndicator, Alert, Linking } from "react-native";
+import { View, Pressable, ActivityIndicator, Alert, Linking } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSettings, updateSetting } from "@/lib/services";
 import { getAPIKey, saveAPIKey, testAIConnection, type AIProvider } from "@/lib/ai";

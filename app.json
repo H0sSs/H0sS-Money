@@ -2,7 +2,7 @@
   "expo": {
     "name": "H0sS-Money",
     "slug": "hoss-money",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hossmoney",
@@ -36,7 +36,7 @@
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "versionCode": 4
+      "versionCode": 5
     },
     "plugins": [
       "expo-router",
@@ -89,7 +89,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 192,
+          "imageWidth": 288,
           "backgroundColor": "#102D39",
           "dark": {
             "image": "./assets/images/splash-icon.png",
@@ -101,6 +101,7 @@
     "experiments": {
       "typedRoutes": false,
       "reactCompiler": false
-    }
+    },
+    "backgroundColor": "#102D39"
   }
 }

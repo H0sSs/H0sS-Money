@@ -1,5 +1,6 @@
+import { Text } from "@/components/Typography";
 import React from 'react';
-import { Modal, View, Text, Pressable, Alert } from 'react-native';
+import { Modal, View, Pressable, Alert } from "react-native";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '@/lib/db';
 import { updateSetting } from '@/lib/services';

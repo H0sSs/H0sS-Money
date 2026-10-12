@@ -1,16 +1,8 @@
+import { Text } from "@/components/Typography";
 import Icon from "@/components/Icon";
 import { reloadAppAsync } from "expo";
 import React, { useState } from "react";
-import {
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useColorScheme,
-} from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, View, useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type ErrorFallbackProps = {

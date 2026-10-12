@@ -1,3 +1,4 @@
+import { Text, TextInput } from "@/components/Typography";
 import BackupStatus from "@/components/BackupStatus";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -7,10 +8,7 @@ import AISettings from "@/components/AISettings";
 import { numericInput, validAmount } from "@/lib/validation";
 import { localDate, parseDate } from "@/lib/dates";
 import React, { useState } from "react";
-import {
-  View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput,
-  Alert, ActivityIndicator, Switch, Platform, Image,
-} from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Modal, Alert, ActivityIndicator, Switch, Platform, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import Icon from "@/components/Icon";

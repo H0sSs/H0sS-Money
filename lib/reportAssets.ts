@@ -9,8 +9,8 @@ async function encoded(module: number) {
 export async function reportAssets(customLogo?:string|null) {
   const [logo,font,boldFont] = await Promise.all([
     encoded(require('../assets/images/icon.png')),
-    encoded(require('../assets/fonts/HossArabic-Regular.ttf')),
-    encoded(require('../assets/fonts/HossArabic-Bold.ttf')),
+    encoded(require('../assets/fonts/Tajawal-Regular.ttf')),
+    encoded(require('../assets/fonts/Tajawal-Bold.ttf')),
   ]);
   // Settings may store a local URI or raw base64; PDF must embed a data URI.
   let image = `data:image/png;base64,${logo}`;

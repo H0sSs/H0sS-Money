@@ -1,5 +1,6 @@
+import { Text } from "@/components/Typography";
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useRouter } from "expo-router";
 import Icon from "@/components/Icon";

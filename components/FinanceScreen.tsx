@@ -1,5 +1,6 @@
+import { Text, TextInput } from "@/components/Typography";
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Modal, Alert, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Pressable, ScrollView, Modal, Alert, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';

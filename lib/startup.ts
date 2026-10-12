@@ -1,0 +1,1 @@
+export const STARTUP_BACKGROUND = '#102D39';

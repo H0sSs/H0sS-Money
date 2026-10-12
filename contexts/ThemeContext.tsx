@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { DarkColors, LightColors, ThemeColors } from "@/lib/theme";
 import { getSettings, updateSetting } from "@/lib/services";
+import * as SystemUI from "expo-system-ui";
 import { StatusBar } from "expo-status-bar";
 
 type ThemeContextType = {
@@ -16,12 +17,14 @@ const ThemeContext = createContext<ThemeContextType>({
   toggleTheme: () => {},
 });
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [isDark, setIsDark] = useState(true);
+export function ThemeProvider({ children, initialTheme = "dark" }: { children: React.ReactNode; initialTheme?: "dark"|"light" }) {
+  const [isDark, setIsDark] = useState(initialTheme !== "light");
 
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const client = useQueryClient();
   useEffect(() => { if (settings) setIsDark(settings.theme !== "light"); }, [settings?.theme]);
+
+  useEffect(() => { SystemUI.setBackgroundColorAsync(isDark ? DarkColors.background : LightColors.background).catch(() => {}); }, [isDark]);
 
   const toggleTheme = async () => {
     const next = !isDark;

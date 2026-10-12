@@ -1,3 +1,6 @@
+import StartupScreen from "@/components/StartupScreen";
+import { STARTUP_BACKGROUND } from "@/lib/startup";
+import { Text } from "@/components/Typography";
 import Guide from "@/components/Guide";
 import { postRecurring } from "@/lib/finance";
 import { db } from "@/lib/db";
@@ -9,7 +12,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState, Image, useColorScheme } from "react-native";
+import { View, StyleSheet, Pressable, ActivityIndicator, AppState } from "react-native";
 import { Alert } from "react-native";
 import { queryClient } from "@/lib/query";
 import { localDate } from "@/lib/dates";
@@ -30,24 +33,8 @@ import Icon from "@/components/Icon";
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 
-function LoadingScreen({ message }: { message: string }) {
-  const C = useColorScheme()==="dark"?DarkColors:LightColors;
-  return (
-    <View style={[lock.container, { backgroundColor: C.background }]}>
-      <View style={lock.inner}>
-        <View style={[lock.circle, { backgroundColor: C.primary + "20", borderColor: C.primary }]}>
-          <Image source={require("../assets/images/icon.png")} style={{width:80,height:80,borderRadius:18}}/>
-        </View>
-        <Text style={[lock.title, { color: C.text }]}>H0sS-Money</Text>
-        <ActivityIndicator color={C.primary} size="small" style={{ marginTop: 12 }} />
-        <Text style={[lock.sub, { color: C.textSecondary, marginTop: 6 }]}>{message}</Text>
-      </View>
-    </View>
-  );
-}
-
 function LockGate({ onUnlock }: { onUnlock: () => void }) {
-  const C = useColorScheme()==="dark"?DarkColors:LightColors;
+  const C = { ...DarkColors, background: STARTUP_BACKGROUND };
   const [status, setStatus] = useState<"idle" | "working" | "failed">("idle");
 
   const tryAuth = async () => {
@@ -112,9 +99,11 @@ function ThemedNavigator() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    ArabicRegular: require('../assets/fonts/HossArabic-Regular.ttf'),
-    ArabicBold: require('../assets/fonts/HossArabic-Bold.ttf'),
+    ArabicRegular: require('../assets/fonts/Tajawal-Regular.ttf'),
+    ArabicMedium: require('../assets/fonts/Tajawal-Medium.ttf'),
+    ArabicBold: require('../assets/fonts/Tajawal-Bold.ttf'),
   });
+  const [initialTheme, setInitialTheme] = useState<'dark'|'light'>('dark');
   const [dbReady, setDbReady] = useState(false);
   const [authNeeded, setAuthNeeded] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
@@ -135,6 +124,8 @@ export default function RootLayout() {
         initNotifications().catch(() => {});
         try {
           const settings = await getSettings();
+          setInitialTheme(settings.theme === 'light' ? 'light' : 'dark');
+          queryClient.setQueryData(['settings'], settings);
           if (settings.fingerprintEnabled) {
             const hasHW = await LocalAuthentication.hasHardwareAsync();
             const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -147,7 +138,7 @@ export default function RootLayout() {
         } catch (error) { throw error; }
         setAuthChecked(true);
       })
-      .catch(() => { setBootError("تعذر تجهيز البيانات. بياناتك لم تُحذف؛ حاول مرة أخرى."); SplashScreen.hideAsync().catch(() => {}); });
+      .catch(() => { setBootError("تعذر تجهيز البيانات. بياناتك لم تُحذف؛ حاول مرة أخرى."); });
   }, [bootAttempt]);
 
   useEffect(() => {
@@ -172,11 +163,7 @@ export default function RootLayout() {
 
   const ready = (fontsLoaded || fontError) && dbReady && authChecked;
 
-  useEffect(() => {
-    if (ready) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [ready]);
+  const revealFirstFrame = () => { requestAnimationFrame(() => { SplashScreen.hideAsync().catch(() => {}); }); };
 
   // Ask for notification permission once on first launch (after DB ready & unlocked)
   const canPromptNotifs = ready && (!authNeeded || authenticated);
@@ -211,12 +198,12 @@ export default function RootLayout() {
   },[canPromptNotifs]);
 
 
-  if (bootError) return <SafeAreaProvider><View style={[lock.container, { backgroundColor: DarkColors.background }]}><Text style={{ color: DarkColors.text, textAlign: "center", padding: 24 }}>{bootError}</Text><Pressable style={[lock.btn, { backgroundColor: DarkColors.primary }]} onPress={() => setBootAttempt(value => value + 1)}><Text>إعادة المحاولة</Text></Pressable></View></SafeAreaProvider>;
+  if (bootError) return <SafeAreaProvider><StartupScreen onLayout={revealFirstFrame} error message={bootError} onRetry={() => setBootAttempt(value => value + 1)}/></SafeAreaProvider>;
 
   if (!ready) {
     return (
       <SafeAreaProvider>
-        <LoadingScreen message={!dbReady ? "تحضير قاعدة البيانات..." : !fontsLoaded ? "تحميل الخطوط..." : "لحظة..."} />
+        <StartupScreen message={!dbReady ? "تحضير قاعدة البيانات..." : !fontsLoaded ? "تحميل الخطوط..." : "لحظة..."} />
       </SafeAreaProvider>
     );
   }
@@ -224,7 +211,7 @@ export default function RootLayout() {
   if (authNeeded && !authenticated) {
     return (
       <SafeAreaProvider>
-        <LockGate onUnlock={() => setAuthenticated(true)} />
+        <View style={{flex:1,backgroundColor:STARTUP_BACKGROUND}} onLayout={revealFirstFrame}><LockGate onUnlock={() => setAuthenticated(true)} /></View>
       </SafeAreaProvider>
     );
   }
@@ -233,8 +220,8 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
-            <ThemedNavigator />
+          <ThemeProvider initialTheme={initialTheme}>
+            <View style={{flex:1,backgroundColor:initialTheme==='light'?LightColors.background:DarkColors.background}} onLayout={revealFirstFrame}><ThemedNavigator /></View>
           </ThemeProvider>
         </QueryClientProvider>
       </ErrorBoundary>

@@ -1,10 +1,11 @@
+import { Text, TextInput } from "@/components/Typography";
 import PageHeader from "@/components/PageHeader";
 import { buildStatsReport } from "@/lib/statsReport";
 import { reportAssets } from "@/lib/reportAssets";
 import { getIncomes, getAccounts } from "@/lib/finance";
 import { localDate, parseDate, monthRange } from "@/lib/dates";
 import React, { useState, useMemo, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, useWindowDimensions, Modal, Alert, ActivityIndicator, TextInput, Image } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Platform, useWindowDimensions, Modal, Alert, ActivityIndicator, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import Svg, {

@@ -1,5 +1,6 @@
+import { Text } from "@/components/Typography";
 import React from "react";
-import { View, Text, Image } from "react-native";
+import { View, Image } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import Icon from "./Icon";
 export default function PageHeader({ title, subtitle, icon, actions, logo }: { title: string; subtitle: string; icon: string; actions?: React.ReactNode; logo?: string | null }) {

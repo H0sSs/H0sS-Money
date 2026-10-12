@@ -1,5 +1,6 @@
+import { Text } from "@/components/Typography";
 import React from 'react';
-import { View, Text, Switch, Alert } from 'react-native';
+import { View, Switch, Alert } from "react-native";
 import * as Notifications from 'expo-notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '@/lib/db';

@@ -1,13 +1,11 @@
+import { Text, TextInput } from "@/components/Typography";
 import {getAccounts} from "@/lib/finance";
 import PageHeader from "@/components/PageHeader";
 import { numericInput, validAmount } from "@/lib/validation";
 import { localDate, parseDate } from "@/lib/dates";
 import React, { useState, useEffect } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {
-  View, Text, StyleSheet, FlatList, Pressable, Alert,
-  Modal, ScrollView, TextInput, ActivityIndicator, Platform, Share,
-} from "react-native";
+import { View, StyleSheet, FlatList, Pressable, Alert, Modal, ScrollView, ActivityIndicator, Platform, Share } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import Icon from "@/components/Icon";

@@ -1,17 +1,9 @@
+import { Text } from "@/components/Typography";
 import { useRouter } from "expo-router";
 import PageHeader from "@/components/PageHeader";
 import { localDate, parseDate } from "@/lib/dates";
 import React, { useState, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  Platform,
-} from "react-native";
+import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import Animated, {

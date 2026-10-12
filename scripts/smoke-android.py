@@ -22,7 +22,7 @@ def tap(label, optional=False):
         values=[node.get('text',''),node.get('content-desc','')]
         if any(value==label or value.startswith(label+',') for value in values):
             coords=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
-            if len(coords)==4 and coords[2]>coords[0] and coords[3]-coords[1]>=40 and coords[2]-coords[0]>=40 and coords[1]>=height*.08 and (coords[1]+coords[3])//2<safe_bottom-16:
+            if len(coords)==4 and coords[2]>coords[0] and coords[3]-coords[1]>=40 and coords[2]-coords[0]>=40 and coords[1]>=height*.025 and (coords[1]+coords[3])//2<safe_bottom-16:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
                 time.sleep(2)
                 return True

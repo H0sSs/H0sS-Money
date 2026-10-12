@@ -1,0 +1,150 @@
+name: Verify built 1.2.4 APKs and publish
+on:
+  push:
+    branches: [fix/verify-built-1.2.4]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify exact application source and successful APK assembly
+        run: |
+          python3 - <<'PYCODE'
+          import subprocess,json,os
+          source='9440ce46b9e7dbfb0d0999caeb9231d48b0eac9d'
+          changed=subprocess.check_output(['git','diff','--name-only',source,'HEAD'],text=True).splitlines()
+          assert all(p in ['README.md','CHANGELOG.md'] or p.startswith(('docs/','scripts/','.github/workflows/')) for p in changed), 'Application changed: new bundle and validation required'
+          repo='repos/'+os.environ['GITHUB_REPOSITORY']
+          run=json.loads(subprocess.check_output(['gh','api',repo+'/actions/runs/38307078400'],text=True));assert run['head_sha']==source
+          jobs=json.loads(subprocess.check_output(['gh','api',repo+'/actions/runs/38307078400/jobs'],text=True))['jobs']
+          assert any(j['name']=='assemble' and j['conclusion']=='success' for j in jobs)
+          PYCODE
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: H0sS-Money-release-*
+          path: downloads
+          run-id: 38307078400
+          github-token: ${{ github.token }}
+      - name: Verify immutable APK hashes and private certificate evidence
+        run: |
+          python3 - <<'PYCODE'
+          import pathlib,hashlib
+          for v in ['arm64','universal']:
+            d=pathlib.Path('downloads')/('H0sS-Money-release-'+v)
+            p=d/f'H0sS-Money-1.2.4-{v}.apk'
+            assert hashlib.sha256(p.read_bytes()).hexdigest()==(d/'SHA256SUMS.txt').read_text().split()[0]
+            assert '8967c433f04f9e2879f88a95f92c95d268316163d84db3442ef221f415fae91c' in (d/'signature.txt').read_text()
+            assert (d/'native-reuse.txt').read_text().startswith('PASS:')
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: H0sS-Money-release-arm64
+          path: downloads/H0sS-Money-release-arm64
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: H0sS-Money-release-universal
+          path: downloads/H0sS-Money-release-universal
+          if-no-files-found: error
+
+  smoke:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29,35,36]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/download-artifact@v4
+        with:
+          name: H0sS-Money-release-universal
+          path: output
+      - run: python3 -m pip install pypdf pillow
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: bash scripts/smoke-android.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-smoke-evidence-api-${{ matrix.api }}
+          path: smoke
+          if-no-files-found: ignore
+
+  publish:
+    needs: [prepare, smoke]
+    if: github.ref == 'refs/heads/fix/verify-built-1.2.4'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: H0sS-Money-release-*
+          path: downloads
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: android-smoke-evidence-api-*
+          path: qa
+      - name: Verify private signatures and collect release files
+        run: |
+          set -euo pipefail
+          mkdir -p delivery
+          for VARIANT in arm64 universal; do
+            DIR="downloads/H0sS-Money-release-$VARIANT"
+            grep -q 'Private H0sS-Money release certificate' "$DIR/SIGNING-NOTE.txt"
+            grep -q '8967c433f04f9e2879f88a95f92c95d268316163d84db3442ef221f415fae91c' "$DIR/signature.txt"
+            grep -q "versionName='1.2.4'" "$DIR/package.txt"
+            grep -q "versionCode='7'" "$DIR/package.txt"
+            APK="$DIR/H0sS-Money-1.2.4-$VARIANT.apk"
+            EXPECTED=$(awk '{print $1}' "$DIR/SHA256SUMS.txt")
+            ACTUAL=$(sha256sum "$APK" | awk '{print $1}')
+            [ "$EXPECTED" = "$ACTUAL" ]
+            cp "$APK" delivery/
+          done
+          for API in 29 35 36; do
+            grep -q '^PASS:' "qa/android-smoke-evidence-api-$API/result.txt"
+            grep -q '^PASS:' "qa/android-smoke-evidence-api-$API/exports-result.txt"
+          done
+          (cd delivery && sha256sum *.apk > SHA256SUMS.txt)
+          cp docs/RELEASE-1.2.4.md delivery/H0sS-Money-1.2.4-Report.md
+          printf '\nSource: %s\nBuild: https://github.com/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> delivery/H0sS-Money-1.2.4-Report.md
+          python3 - <<'PY'
+          import pathlib,zipfile
+          with zipfile.ZipFile('delivery/H0sS-Money-1.2.4-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as z:
+            for p in sorted(pathlib.Path('qa').rglob('*')):
+              if p.is_file() and p.suffix in ['.png','.pdf','.mp4','.xml','.txt'] and p.name!='logcat.txt':z.write(p,p.relative_to('qa'))
+          PY
+      - name: Publish verified APKs
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v1.2.4" >/dev/null 2>&1; then echo 'Release already exists; refusing overwrite.'; exit 1; fi
+          gh release create v1.2.4 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'H0sS-Money 1.2.4' --notes-file delivery/H0sS-Money-1.2.4-Report.md delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.2.4-Report.md delivery/H0sS-Money-1.2.4-UI-QA.zip
+          gh release edit v1.2.4 --repo "$GITHUB_REPOSITORY" --draft=false --latest

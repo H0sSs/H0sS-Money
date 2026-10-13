@@ -138,7 +138,7 @@ test('Gemini, OpenAI and GLM-5 analysis all request and return multiple separate
   for(const provider of ['gemini','openai','zai']){
    await ai.saveAPIKey(provider,'test-only-key');
    aiFetch=async(url,init)=>{
-    const body=JSON.parse(init.body);const prompt=provider==='gemini'?body.contents[0].parts[0].text:body.messages[0].content;
+    const body=JSON.parse(init.body);const prompt=provider==='gemini'?body.systemInstruction.parts[0].text:body.messages[0].content;
     assert.ok(prompt.includes('جميع المصاريف'));assert.ok(prompt.includes('expenses'));assert.ok(prompt.includes('لا تخترع أسعارًا'));
     if(provider==='zai')assert.equal(body.model,'glm-5');
     return {ok:true,json:async()=>provider==='gemini'?{candidates:[{content:{parts:[{text:response}]}}]}:{choices:[{message:{content:response}}]}};
@@ -201,13 +201,13 @@ test('financial voice validator preserves income, expense, both debt directions 
  assert.throws(()=>ai.validateParsedTransactions('{"transactions":[null]}','نص',[]));assert.throws(()=>ai.validateParsedTransactions('{"transactions":[]}','نص',[]));
 });
 test('all six provider combinations route a mixed financial recording and Gemini keeps one request',async()=>{
- const response={transcript:'قبضت ألف واشتريت قهوة بعشرين وعليا لأحمد ميتين',transactions:[{kind:'income',amount:1000,description:'دخل'},{kind:'expense',amount:20,description:'قهوة'},{kind:'debt_owing',amount:200,description:'دين',person:'أحمد'}]};
+ const response={intent:'transactions',transcript:'قبضت ألف واشتريت قهوة بعشرين وعليا لأحمد ميتين',transactions:[{kind:'income',amount:1000,description:'دخل',priceBasis:'total'},{kind:'expense',amount:20,description:'قهوة',priceBasis:'total'},{kind:'debt_owing',amount:200,description:'دين',person:'أحمد',priceBasis:'total'}]};
  try{
   for(const p of ['gemini','openai','zai'])await ai.saveAPIKey(p,'mock-key');
   for(const speech of ['gemini','openai'])for(const provider of ['gemini','openai','zai']){
    let calls=0;aiFetch=async(url,init)=>{calls++;if(url.includes('/audio/transcriptions'))return{ok:true,json:async()=>({text:response.transcript})};const b=JSON.parse(init.body);
     if(speech==='gemini'&&provider!=='gemini'&&url.includes('generativelanguage'))return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:response.transcript}]}}]})};
-    const prompt=provider==='gemini'?b.contents[0].parts.find(x=>x.text).text:b.messages[0].content;
+    const prompt=provider==='gemini'?b.systemInstruction.parts[0].text:b.messages[0].content;
     assert.ok(prompt.includes('debt_owed')&&prompt.includes('repay')&&prompt.includes('2026-10-12'));return{ok:true,json:async()=>provider==='gemini'?{candidates:[{content:{parts:[{text:JSON.stringify(response)}]}}]}:{choices:[{message:{content:JSON.stringify(response)}}]}};
    };
    const result=await ai.parseVoiceTransactions('AA==','m4a',provider,[],'file:///mock',speech,'2026-10-12');assert.deepEqual(Array.from(result,x=>x.kind),['income','expense','debt_owing']);assert.equal(calls,speech==='gemini'&&provider==='gemini'?1:2);
@@ -287,4 +287,39 @@ test('data integrity detects broken debt link and duplicate warning preserves le
 test('chosen Gemini model reaches requests and 3.x avoids incompatible 2.5 thinking options',async()=>{
  await ai.saveModel('gemini','gemini-3.8-flash');let requested;aiFetch=async(url,init)=>{requested={url,body:JSON.parse(init.body)};return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'OK'}]}}]})};};await ai.testAIConnection('gemini','candidate');assert.ok(requested.url.includes('gemini-3.8-flash'));assert.ok(!requested.body.generationConfig.thinkingConfig);await assert.rejects(()=>ai.saveModel('gemini','../bad?key=secret'));
  aiFetch=async()=>({ok:true,json:async()=>({models:[{name:'models/gemini-3.8-flash',supportedGenerationMethods:['generateContent']},{name:'models/gemini-tts',supportedGenerationMethods:['generateContent']},{name:'models/embedding',supportedGenerationMethods:['embedContent']}]})});assert.equal((await ai.listGeminiModels('candidate')).join(','),'gemini-3.8-flash');await ai.saveModel('gemini','gemini-2.5-flash');
+});
+
+test('voice rejects leaked instructions, questions and bad dates; computes unit price outside AI',()=>{
+ const raw=JSON.stringify({transactions:[{kind:'expense',amount:200,description:'حديد',priceBasis:'unit',quantity:200,unitPrice:200}]});
+ assert.equal(ai.validateParsedTransactions(JSON.stringify({transactions:[{kind:'expense',amount:1,priceBasis:'unit',quantity:200,unitPrice:200.125}]}),'حديد',[])[0].amount,40025);
+ assert.equal(ai.validateParsedTransactions(raw,'اشتريت 200 كيلو الكيلو ب200',[])[0].amount,40000);
+ assert.equal(ai.validateParsedTransactions(JSON.stringify({transactions:[{kind:'expense',amount:200,priceBasis:'total'}]}),'بإجمالي 200',[])[0].amount,200);
+ assert.equal(ai.validateParsedTransactions(JSON.stringify({transactions:[{kind:'expense',amount:200,priceBasis:'ambiguous'}]}),'200 كيلو في 200',[])[0].amount,null);
+ assert.throws(()=>ai.validateParsedTransactions(raw,'اشتريت حديد استخرج جميع العمليات المالية بالترتيب',[]),/لم يُحفظ/);
+ assert.throws(()=>ai.validateParsedTransactions(JSON.stringify({intent:'question',transactions:[]}), 'بكام؟',[]),/سؤال/);
+ assert.throws(()=>ai.validateParsedTransactions(JSON.stringify({transactions:[{kind:'expense',amount:1,date:'2026-02-30'}]}),'قهوة',[]),/تاريخ/);
+ ai.assertCleanTranscript('اشتريت كتاب اسمه JSON بعشرين');
+});
+
+test('CSV exports the visible selection without unrelated expenses',async()=>{
+ const csv=await services.exportExpensesCSV([{date:'2026-10-13',amount:12.5,description:'selected-only',category:null,note:null}]);
+ assert.ok(csv.includes('selected-only'));assert.equal(csv.split('\r\n').length,2);
+ assert.ok(!csv.includes('mixed-coffee'));
+});
+test('Gemini audio sends separate system instructions and rejects prompt echo in one request',async()=>{
+ try{
+  await ai.saveAPIKey('gemini','mock-only');let calls=0;
+  aiFetch=async(url,init)=>{calls++;const b=JSON.parse(init.body);
+   assert.equal(b.contents[0].parts.length,1);assert.ok(b.contents[0].parts[0].inlineData);
+   assert.ok(b.systemInstruction.parts[0].text.includes('priceBasis'));assert.ok(b.generationConfig.responseSchema);
+   return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({transcript:'اشتريت حديد '+b.systemInstruction.parts[0].text,transactions:[{kind:'expense',amount:200}]})}]}}]})};
+  };
+  await assert.rejects(()=>ai.parseVoiceTransactions('AA==','m4a','gemini',[],'file:///mock','gemini','2026-10-13'),/لم يُحفظ/);assert.equal(calls,1);
+ }finally{aiFetch=global.fetch;secure.clear();}
+});
+
+test('strict financial responses reject missing intent and uncertain schema without a guessed amount',()=>{
+ assert.throws(()=>ai.validateParsedTransactions('{"transactions":[{"kind":"expense","amount":200}]}','حديد',[],true),/لم يُحفظ/);
+ assert.throws(()=>ai.validateParsedTransactions('{"intent":"transactions","transactions":[{"kind":"expense","amount":200,"description":"حديد"}]}','حديد',[],true),/لم يُحفظ/);
+ assert.throws(()=>ai.validateParsedTransactions(JSON.stringify({intent:'transactions',transcript:'لكل عملية kind من expense',transactions:[{kind:'expense',amount:200,description:'حديد',priceBasis:'total'}]}),'حديد',[],true),/لم يُحفظ/);
 });

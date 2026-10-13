@@ -35,6 +35,22 @@ def tap_scroll(label):
         scroll_body()
     raise RuntimeError(f'Control not reachable after scrolling: {label}')
 
+def receive_export(timeout=90):
+    # PDF rendering is asynchronous and slower on older emulator WebViews.
+    # Wait for the actual chooser instead of assuming it is ready after 5s.
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        if tap('Export QA',optional=True):
+            tap('Just once',optional=True)
+            time.sleep(3)
+            return
+        if any(n.get('text') in ['تعذر التصدير','التصدير'] and n.get('class')=='android.widget.TextView' for n in nodes()):
+            screenshot('export-error')
+            raise RuntimeError('Native export reported an error')
+        time.sleep(1)
+    screenshot('export-timeout')
+    raise RuntimeError(f'Export chooser not ready within {timeout}s')
+
 def choose_kind(index,name):
     label=f'نوع الصنف {index}: {name}'
     for attempt in range(24):
@@ -53,7 +69,11 @@ def fill_field(label,value):
             height=int(re.findall(r'\d+x(\d+)',adb('shell','wm','size'))[-1])
             if len(coords)==4 and coords[3]-coords[1]>=48 and height*.08<(coords[1]+coords[3])//2<height*.9:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
-                time.sleep(1);adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
+                time.sleep(1)
+                if target.get('text',''):
+                    adb('shell','input','keyevent','123')
+                    adb('shell','input','keyevent',*(['67']*len(target.get('text',''))))
+                adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
                 entered=next(n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label)
                 assert entered.get('text')==value,f'Incorrect input: {label}'
                 return
@@ -137,14 +157,22 @@ screenshot('home-with-batch')
 for label,name in [('الإحصائيات','stats'),('المصاريف','expenses'),('الإعدادات','admin')]:
     tap(label)
     screenshot(name)
+    if name=='expenses':
+        assert any('إجمالي المصاريف المعروضة' in n.get('text','') for n in nodes()), 'Expense summary missing'
+        fill_field('بحث المصاريف','QA_bread')
+        assert any('19.75' in n.get('text','') for n in nodes()), 'Filtered expense total incorrect'
+        screenshot('expenses-filtered')
+        fill_field('بحث المصاريف','NO_MATCH_126')
+        assert any('لا توجد نتائج مطابقة للفلاتر' in n.get('text','') for n in nodes()), 'Filtered empty state missing'
+        tap('مسح جميع الفلاتر')
+        assert any('39.50' in n.get('text','') for n in nodes()), 'Reset filters failed'
+        screenshot('expenses-redesign')
     if name=='stats':
         for action,name_out in [('تصدير تقرير PDF','pdf'),('تصدير الإحصائيات صورة','image')]:
             tap(action)
             time.sleep(5)
             screenshot('export-'+name_out+'-chooser')
-            tap('Export QA')
-            tap('Just once',optional=True)
-            time.sleep(3)
+            receive_export()
             assert 'خطأ' not in [n.get('text','') for n in nodes()], 'Export failed'
         scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison'); scroll_body(); screenshot('stats-comparison-full'); assert any('لا يوجد إنفاق سابق لحساب النسبة' in n.get('text','') for n in nodes()), 'Zero baseline comparison fabricated a percentage'
 for label,name in [('الحسابات والأرصدة','accounts'),('الدخل','income'),('الديون والسداد','debts'),('المصاريف المتكررة','recurring')]:
@@ -225,8 +253,8 @@ for _ in range(8):
     scroll_body()
 assert any('250.50' in n.get('text','') for n in nodes()),'Full report totals mismatch'
 screenshot('report-all-summary')
-tap_scroll('تصدير PDF');time.sleep(5)
-tap('Export QA');tap('Just once',optional=True);time.sleep(3)
+tap_scroll('تصدير PDF')
+receive_export()
 screenshot('report-exported')
 adb('shell','input','keyevent','4');time.sleep(2)
 # Restore the settings menu top before opening preferences.

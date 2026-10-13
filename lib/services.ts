@@ -547,8 +547,8 @@ export async function updateSetting(key: string, value: string): Promise<void> {
 }
 
 // ─── Export CSV ───────────────────────────────────────────────
-export async function exportExpensesCSV(): Promise<string> {
-  const expenses = await getExpenses();
+export async function exportExpensesCSV(selected?: Expense[]): Promise<string> {
+  const expenses = selected ?? await getExpenses();
   const header = "\uFEFFالتاريخ,المبلغ,الوصف,القسم,ملاحظة\r\n";
   return header + expenses.map(e => [e.date, e.amount, e.description, e.category?.name ?? "", e.note ?? ""].map(csvCell).join(",")).join("\r\n");
 }

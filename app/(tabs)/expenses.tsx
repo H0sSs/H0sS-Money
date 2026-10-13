@@ -5,7 +5,7 @@ import { numericInput, validAmount } from "@/lib/validation";
 import { localDate, parseDate } from "@/lib/dates";
 import React, { useState, useEffect } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { View, StyleSheet, FlatList, Pressable, Alert, Modal, ScrollView, ActivityIndicator, Platform, Share } from "react-native";
+import { View, StyleSheet, FlatList, SectionList, Pressable, Alert, Modal, ScrollView, ActivityIndicator, Platform, Share } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import Icon from "@/components/Icon";
@@ -132,6 +132,9 @@ export default function ExpensesScreen() {
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [deleted,setDeleted]=useState<Expense|null>(null);
+  const [accountFilter,setAccountFilter]=useState<number|null>(null);
+  const {data:accounts=[]}=useQuery({queryKey:["accounts"],queryFn:getAccounts});
+  const [sortOrder,setSortOrder]=useState<"newest"|"oldest"|"largest">("newest");
   const [showFilters,setShowFilters]=useState(false);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
@@ -162,15 +165,16 @@ export default function ExpensesScreen() {
     const cutoffStr = cutoff ? localDate(cutoff) : null;
     const q = search.trim().toLowerCase();
     return allExpenses.filter((e) => {
-      if (cutoffStr && e.date < cutoffStr) return false;
-      if (catFilter != null && e.category_id !== catFilter) return false;
+      if (cutoffStr && (e.date < cutoffStr || e.date > localDate(today))) return false;
+      if (catFilter != null && (catFilter===-2?e.category_id!==null:e.category_id!==catFilter)) return false;
+      if(accountFilter!==null&&e.account_id!==accountFilter)return false;
       if (q) {
-        const hay = `${e.description} ${e.note ?? ""} ${e.category?.name ?? ""}`.toLowerCase();
+        const hay = `${e.description} ${e.note ?? ""} ${e.category?.name ?? ""} ${e.amount} ${e.date} ${accounts.find(a=>a.id===e.account_id)?.name??""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
-    });
-  }, [allExpenses, search, dateFilter, catFilter]);
+    }).sort((a,b)=>sortOrder==="largest"?b.amount-a.amount||b.date.localeCompare(a.date):sortOrder==="oldest"?a.date.localeCompare(b.date):b.date.localeCompare(a.date));
+  }, [allExpenses, search, dateFilter, catFilter,sortOrder,accountFilter,accounts]);
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: getCategories });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const currency = settings?.currency ?? "EGP";
@@ -187,6 +191,7 @@ export default function ExpensesScreen() {
       queryClient.invalidateQueries({ queryKey: ["notif-log"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
+    onError:(e:Error)=>Alert.alert("تعذر الحذف",e.message),
   });
 
   const cloneMutation=useMutation({mutationFn:createExpense,onSuccess:()=>{queryClient.invalidateQueries();setEditExpense(null);},onError:(e)=>Alert.alert('تعذر الإضافة',e.message)});
@@ -215,7 +220,7 @@ export default function ExpensesScreen() {
   const handleExport = async () => {
     try {
       setIsExporting(true);
-      const csv = await exportExpensesCSV();
+      const csv = await exportExpensesCSV(expenses);
       const path = FileSystem.cacheDirectory + "hossmoney_export.csv";
       await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
       const canShare = await Sharing.isAvailableAsync();
@@ -232,24 +237,30 @@ export default function ExpensesScreen() {
   };
 
   const grouped = groupByDate(expenses);
-  const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-  const total = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  const filterActive = !!search.trim() || dateFilter !== "all" || catFilter !== null;
+  const dates = Object.keys(grouped).sort((a, b) => sortOrder==="oldest"?a.localeCompare(b):sortOrder==="largest"?Math.max(...grouped[b].map(e=>e.amount))-Math.max(...grouped[a].map(e=>e.amount)):b.localeCompare(a));
+  const total = expenses.reduce((sum, e) => sum + Math.round(Number(e.amount)*100), 0)/100;
+  const filterActive = !!search.trim() || dateFilter !== "all" || catFilter !== null||accountFilter!==null;
 
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
-      <PageHeader title="سجل المصاريف" subtitle={`${expenses.length} عملية • ${total.toFixed(2)} ${currency}`} icon="list" actions={<>
+      <PageHeader title="سجل المصاريف" subtitle="راجع إنفاقك وتابع تفاصيل كل عملية" icon="list" actions={<><Pressable accessibilityLabel="إضافة مصروف" onPress={()=>setEditExpense({id:-1,uid:"",amount:0,description:"",category_id:null,note:null,date:localDate(),created_at:""})} style={[s.exportBtn,{borderColor:colors.border}]}><Icon name="plus" color={colors.primary} size={20}/></Pressable>
         <Pressable onPress={handleExport} disabled={isExporting} style={[s.exportBtn, { backgroundColor: colors.primary + "20", borderColor: colors.primary }]}>
           {isExporting ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="download" size={16} color={colors.primary} />}
           <Text style={[s.exportText, { color: colors.primary }]}>تصدير</Text>
         </Pressable>
       </>} />
+      <View style={{marginHorizontal:16,padding:16,borderRadius:20,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,gap:6}}>
+        <Text style={{color:colors.textSecondary,fontFamily:'ArabicRegular',textAlign:'right'}}>إجمالي المصاريف المعروضة</Text>
+        <Text style={{color:colors.primary,fontFamily:'ArabicBold',fontSize:26,textAlign:'right'}}>{total.toFixed(2)} {currency}</Text>
+        <Text style={{color:colors.textSecondary,fontFamily:'ArabicRegular',textAlign:'right'}}>{expenses.length} عملية · متوسط العملية {expenses.length?(total/expenses.length).toFixed(2):'0.00'} {currency}</Text>
+      </View>
       <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
         <View style={[s.searchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Icon name="search" size={16} color={colors.textSecondary} />
           <TextInput
             style={[s.searchInput, { color: colors.text }]}
-            placeholder="ابحث في الوصف، الملاحظة، أو الفئة..."
+            accessibilityLabel="بحث المصاريف" maxLength={200}
+            placeholder="ابحث بالوصف، المبلغ، الفئة أو الحساب..."
             placeholderTextColor={colors.textSecondary}
             value={search}
             onChangeText={setSearch}
@@ -262,6 +273,8 @@ export default function ExpensesScreen() {
         </View>
         <Pressable onPress={()=>setShowFilters(!showFilters)} style={{paddingVertical:12}}><Text style={{color:colors.primary,textAlign:'right',fontFamily:'ArabicBold'}}>{showFilters?'إخفاء الفلاتر':'الفلاتر'}{filterActive?' · مفعّلة':''}</Text></Pressable>
         {showFilters&&<>
+        <ScrollView horizontal contentContainerStyle={{gap:8,marginBottom:8}}>{[{id:0,name:'كل الحسابات'},...accounts].map(a=><Pressable key={a.id} onPress={()=>setAccountFilter(a.id||null)} style={[s.filterChip,{borderColor:(accountFilter??0)===a.id?colors.primary:colors.border}]}><Text style={{color:colors.text,fontFamily:'ArabicRegular'}}>{a.name}</Text></Pressable>)}</ScrollView>
+        <ScrollView horizontal contentContainerStyle={{gap:8}}>{([{value:'newest',label:'الأحدث'},{value:'oldest',label:'الأقدم'},{value:'largest',label:'الأعلى في كل يوم'}] as const).map(x=><Pressable key={x.value} onPress={()=>setSortOrder(x.value)} style={[s.filterChip,{borderColor:sortOrder===x.value?colors.primary:colors.border}]}><Text style={{color:colors.text,fontFamily:'ArabicRegular'}}>{x.label}</Text></Pressable>)}</ScrollView>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -290,7 +303,7 @@ export default function ExpensesScreen() {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingTop: 8, gap: 8 }}
-            data={[{ id: -1, name: "كل الفئات", icon: "tag", color: colors.primary, budget: null, created_at: "" }, ...categories]}
+            data={[{ id: -1, name: "كل الفئات", icon: "tag", color: colors.primary, budget: null, created_at: "" },{id:-2,name:"بدون فئة",icon:"tag",color:colors.textSecondary,budget:null,created_at:""}, ...categories]}
             keyExtractor={(c) => String(c.id)}
             renderItem={({ item }) => {
               const isAll = item.id === -1;
@@ -309,6 +322,7 @@ export default function ExpensesScreen() {
         )}
         </>}
       </View>
+      {filterActive&&<Pressable onPress={()=>{setSearch('');setCatFilter(null);setDateFilter('all');setAccountFilter(null);}} style={{paddingHorizontal:20,paddingBottom:8}}><Text style={{color:colors.primary,fontFamily:'ArabicRegular',textAlign:'right'}}>مسح جميع الفلاتر</Text></Pressable>}
       {!!deleted&&<View style={{marginHorizontal:16,padding:12,borderRadius:12,backgroundColor:colors.surfaceAlt,flexDirection:'row',alignItems:'center',gap:10}}><Pressable disabled={restoreMutation.isPending} onPress={()=>restoreMutation.mutate(deleted)}><Text style={{color:colors.primary,fontFamily:'ArabicBold'}}>تراجع عن الحذف</Text></Pressable><Text style={{flex:1,textAlign:'right',color:colors.text,fontFamily:'ArabicRegular'}} numberOfLines={1}>{deleted.description}</Text><Pressable accessibilityLabel="إغلاق التراجع" onPress={()=>setDeleted(null)}><Icon name="x" color={colors.textSecondary} size={18}/></Pressable></View>}
 
       {isLoading ? (
@@ -318,52 +332,28 @@ export default function ExpensesScreen() {
       ) : expenses.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
           <Icon name="inbox" size={48} color={colors.textSecondary} />
-          <Text style={{ color: colors.textSecondary, fontFamily: "ArabicRegular", fontSize: 15 }}>لا توجد مصاريف بعد</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: "ArabicRegular", fontSize: 15 }}>{filterActive?"لا توجد نتائج مطابقة للفلاتر":"لا توجد مصاريف بعد"}</Text>
+          <Pressable onPress={()=>{if(filterActive){setSearch("");setDateFilter("all");setCatFilter(null);setAccountFilter(null);}else setEditExpense({id:-1,uid:"",amount:0,description:"",category_id:null,note:null,date:localDate(),created_at:""});}}><Text style={{color:colors.primary,fontFamily:"ArabicBold"}}>{filterActive?"مسح الفلاتر":"إضافة أول مصروف"}</Text></Pressable>
         </View>
       ) : (
-        <FlatList
-          data={dates}
-          keyExtractor={(d) => d}
-          contentContainerStyle={{ paddingBottom: tabBarHeight + 20, paddingTop: 8 }}
-          renderItem={({ item: date }) => (
-            <View>
-              <View style={[s.dateSep, { borderBottomColor: colors.border }]}>
-                <Text style={[s.dateLabel, { color: colors.textSecondary, backgroundColor: colors.background }]}>
-                  {formatDate(date)}
-                </Text>
-              </View>
-              {grouped[date].map((exp) => (
-                <View
-                  key={exp.id}
-                  style={[
-                    filterActive ? s.rowCompact : s.row,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                >
-                  <View style={[s.catDot, { backgroundColor: exp.category?.color ?? colors.primary }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.desc, { color: colors.text }]} numberOfLines={1}>{exp.description}</Text>
-                    {!filterActive && (
-                      <Text style={[s.cat, { color: colors.textSecondary }]}>{exp.category?.name ?? "بدون فئة"}</Text>
-                    )}
-                    {!filterActive && exp.note ? (
-                      <Text style={[s.note, { color: colors.textSecondary }]} numberOfLines={1}>{exp.note}</Text>
-                    ) : null}
-                  </View>
-                  <Text style={[filterActive ? s.amountCompact : s.amount, { color: colors.primary }]}>
-                    {Number(exp.amount).toFixed(2)}
-                  </Text>
-                  <Pressable accessibilityLabel={'تكرار '+exp.description} onPress={()=>setEditExpense({...exp,id:-1,uid:'',date:localDate()})} hitSlop={10} style={{marginLeft:8}}><Icon name="copy" color={colors.textSecondary} size={16}/></Pressable>
-                  <Pressable onPress={() => setEditExpense(exp)} hitSlop={10} style={{ marginLeft: 8 }}>
-                    <Icon name="edit-2" size={filterActive ? 14 : 16} color={colors.textSecondary} />
-                  </Pressable>
-                  <Pressable onPress={() => handleDelete(exp.id, exp.description)} hitSlop={10} style={{ marginLeft: 8 }}>
-                    <Icon name="trash-2" size={filterActive ? 14 : 16} color={colors.error} />
-                  </Pressable>
-                </View>
-              ))}
+        <SectionList
+          sections={dates.map(date=>({date,data:grouped[date]}))}
+          keyExtractor={exp=>String(exp.id)} stickySectionHeadersEnabled={false}
+          contentContainerStyle={{paddingBottom:tabBarHeight+20,paddingTop:8}}
+          renderSectionHeader={({section})=><View style={[s.dateSep,{borderBottomColor:colors.border}]}><Text style={[s.dateLabel,{color:colors.textSecondary,backgroundColor:colors.background}]}>{formatDate(section.date)} · {(section.data.reduce((sum,e)=>sum+Math.round(e.amount*100),0)/100).toFixed(2)} {currency}</Text></View>}
+          renderItem={({item:exp})=><View style={{marginHorizontal:16,marginBottom:10,padding:16,borderRadius:18,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface,gap:10}}>
+            <View style={{flexDirection:'row-reverse',alignItems:'flex-start',gap:12}}>
+              <View style={{padding:10,borderRadius:12,backgroundColor:(exp.category?.color??colors.primary)+'20'}}><Icon name={exp.category?.icon??'tag'} size={20} color={exp.category?.color??colors.primary}/></View>
+              <View style={{flex:1}}><Text style={[s.desc,{color:colors.text}]} numberOfLines={2}>{exp.description}</Text><Text style={[s.cat,{color:colors.textSecondary}]}>{exp.category?.name??'بدون فئة'} · {accounts.find(a=>a.id===exp.account_id)?.name??'نقدي'}</Text></View>
+              <View style={{maxWidth:'40%'}}><Text style={[s.amount,{color:colors.primary}]}>{Number(exp.amount).toFixed(2)}</Text><Text style={{color:colors.textSecondary,fontFamily:'ArabicRegular',fontSize:11,textAlign:'center'}}>{currency}</Text></View>
             </View>
-          )}
+            {!!exp.note&&<Text style={[s.note,{color:colors.textSecondary}]} numberOfLines={3}>{exp.note}</Text>}
+            <View style={{flexDirection:'row-reverse',gap:8,borderTopWidth:1,borderTopColor:colors.border,paddingTop:8}}>
+              <Pressable accessibilityLabel={'تعديل '+exp.description} onPress={()=>setEditExpense(exp)} style={{padding:8,flexDirection:'row-reverse',gap:6,alignItems:'center'}}><Icon name="edit-2" color={colors.primary} size={16}/><Text style={{color:colors.primary,fontFamily:'ArabicRegular',fontSize:12}}>تعديل</Text></Pressable>
+              <Pressable accessibilityLabel={'تكرار '+exp.description} onPress={()=>setEditExpense({...exp,id:-1,uid:'',date:localDate()})} style={{padding:8,flexDirection:'row-reverse',gap:6,alignItems:'center'}}><Icon name="copy" color={colors.textSecondary} size={16}/><Text style={{color:colors.textSecondary,fontFamily:'ArabicRegular',fontSize:12}}>تكرار</Text></Pressable>
+              <Pressable accessibilityLabel={'حذف '+exp.description} disabled={deleteMutation.isPending} onPress={()=>handleDelete(exp.id,exp.description)} style={{padding:8,flexDirection:'row-reverse',gap:6,alignItems:'center'}}><Icon name="trash-2" color={colors.error} size={16}/><Text style={{color:colors.error,fontFamily:'ArabicRegular',fontSize:12}}>حذف</Text></Pressable>
+            </View>
+          </View>}
         />
       )}
 
@@ -384,21 +374,21 @@ const s = StyleSheet.create({
   container: { flex: 1 },
   topBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1 },
   title: { fontSize: 22, fontFamily: "ArabicBold" },
-  subtitle: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 2 },
+  subtitle: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 2,textAlign:"right" },
   exportBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
   exportText: { fontSize: 13, fontFamily: "ArabicBold" },
   dateSep: { borderBottomWidth: 1, marginHorizontal: 16, marginVertical: 8, alignItems: "flex-end" },
   dateLabel: { fontSize: 12, fontFamily: "ArabicRegular", paddingHorizontal: 8, marginBottom: -8 },
-  row: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, padding: 14, gap: 10 },
+  row: { flexDirection: "row-reverse", alignItems: "center", flexWrap:"wrap", marginHorizontal: 16, marginBottom: 8, borderRadius: 18, borderWidth: 1, padding: 14, gap: 10 },
   rowCompact: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginBottom: 4, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   amountCompact: { fontSize: 13, fontFamily: "ArabicBold" },
   catDot: { width: 10, height: 10, borderRadius: 5 },
-  desc: { fontSize: 14, fontFamily: "ArabicRegular" },
-  cat: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 2 },
+  desc: { fontSize: 14, fontFamily: "ArabicBold",textAlign:"right" },
+  cat: { fontSize: 12, fontFamily: "ArabicRegular", marginTop: 2,textAlign:"right" },
   note: { fontSize: 11, fontFamily: "ArabicRegular", marginTop: 2, fontStyle: "italic" },
   amount: { fontSize: 15, fontFamily: "ArabicBold" },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 40 },
+  sheet: { maxHeight:"85%", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 40 },
   handle: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 },
   sheetTitle: { fontSize: 18, fontFamily: "ArabicBold", textAlign: "center", marginBottom: 16 },
   label: { fontSize: 12, fontFamily: "ArabicRegular", marginBottom: 6, marginTop: 4 },

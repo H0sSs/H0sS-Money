@@ -39,7 +39,7 @@ import {
 } from "@/lib/services";
 import ExpenseReview from "@/components/ExpenseReview";
 import {saveTransactions,type TransactionInput} from "@/lib/transactions";
-import { parseVoiceTransactions, generateVoiceSummary, type ParsedTransaction } from "@/lib/ai";
+import { parseVoiceTransactions, parseTextTransactions, generateVoiceSummary, type ParsedTransaction } from "@/lib/ai";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -382,6 +382,7 @@ export default function HomeScreen() {
         saving={createMutation.isPending}
         colors={colors}
         onCancel={() => { setShowModal(false); setParsedData(null); }}
+        onReanalyze={async text=>{const result=await parseTextTransactions(text,settings?.aiProvider??"gemini",categories,localDate());setParsedData(result);}}
         onSave={(data) => { if (saveInFlight.current) return; saveInFlight.current = true; createMutation.mutate(data); }}
       />
     </View>

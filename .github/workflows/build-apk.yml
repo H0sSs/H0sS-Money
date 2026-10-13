@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: apk-${{ github.ref }}
   cancel-in-progress: true
@@ -166,13 +167,22 @@ jobs:
         with:
           name: H0sS-Money-release-universal
           path: output
+      - name: Reuse checked PR evidence only for an identical source tree
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_API: ${{ matrix.api }}
+        run: python3 scripts/reuse-smoke.py
       - run: python3 -m pip install pypdf pillow
+        if: steps.reuse.outputs.reused != 'true'
       - name: Enable KVM
+        if: steps.reuse.outputs.reused != 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
+        if: steps.reuse.outputs.reused != 'true'
         with:
           api-level: ${{ matrix.api }}
           arch: x86_64

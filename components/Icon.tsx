@@ -330,6 +330,9 @@ const ICONS: Record<string, (color: string, sw: number) => React.ReactNode> = {
 };
 
 const PATH_ICONS: Record<string, string> = {
+  'book-open':'M12 5v16M12 5C8 2 4 3 2 4v16c3-2 6-2 10 1 4-3 7-3 10-1V4c-2-1-6-2-10 1Z',
+  user:'M20 21v-2a6 6 0 0 0-6-6h-4a6 6 0 0 0-6 6v2M16 5a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+  grid:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
   'arrow-left': 'M19 12H5m7-7-7 7 7 7',
   'chevron-left': 'm15 18-6-6 6-6',
   'credit-card': 'M3 3h18v18H3zM3 9h18M7 15h3',

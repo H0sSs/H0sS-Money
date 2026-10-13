@@ -137,6 +137,16 @@ screenshot('home-with-batch')
 for label,name in [('الإحصائيات','stats'),('المصاريف','expenses'),('الإعدادات','admin')]:
     tap(label)
     screenshot(name)
+    if name=='expenses':
+        assert any('إجمالي المصاريف المعروضة' in n.get('text','') for n in nodes()), 'Expense summary missing'
+        fill_field('بحث المصاريف','QA_bread')
+        assert any('19.75' in n.get('text','') for n in nodes()), 'Filtered expense total incorrect'
+        screenshot('expenses-filtered')
+        fill_field('بحث المصاريف','NO_MATCH_126')
+        assert any('لا توجد نتائج مطابقة للفلاتر' in n.get('text','') for n in nodes()), 'Filtered empty state missing'
+        tap('مسح جميع الفلاتر')
+        assert any('39.50' in n.get('text','') for n in nodes()), 'Reset filters failed'
+        screenshot('expenses-redesign')
     if name=='stats':
         for action,name_out in [('تصدير تقرير PDF','pdf'),('تصدير الإحصائيات صورة','image')]:
             tap(action)

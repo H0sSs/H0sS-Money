@@ -24,11 +24,13 @@ jobs:
       - run: npm run check
       - run: node scripts/check-voice-routing.cjs
       - run: npx expo-doctor
-      - run: npx expo export --platform android --output-dir /tmp/android-export
+      - run: npx expo export --platform android --no-bytecode --output-dir /tmp/android-export
+      - name: Compile optimized release Hermes bytecode
+        run: node_modules/react-native/sdks/hermesc/linux64-bin/hermesc -w -O -g0 -emit-binary -out /tmp/hoss-index.android.bundle /tmp/android-export/_expo/static/js/android/*.js
       - uses: actions/upload-artifact@v4
         with:
           name: checked-hermes-bundle
-          path: /tmp/android-export/_expo/static/js/android/*.hbc
+          path: /tmp/hoss-index.android.bundle
           if-no-files-found: error
   build:
     needs: validate
@@ -65,7 +67,7 @@ jobs:
       - name: Prepare checked bundle and verified public base APKs
         run: |
           set -euo pipefail
-          cp /tmp/checked-hermes/*.hbc /tmp/hoss-index.android.bundle
+          cp /tmp/checked-hermes/*.bundle /tmp/hoss-index.android.bundle
           for VARIANT in arm64 universal; do
             DIR="base-apks/H0sS-Money-release-$VARIANT"
             mkdir -p "$DIR"

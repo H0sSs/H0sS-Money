@@ -7,6 +7,7 @@ import {
 } from "react-native-keyboard-controller";
 import { Platform, ScrollView, ScrollViewProps, StyleSheet, TextInput, View, ViewProps } from "react-native";
 import { FormKeyboardContext } from "./FormKeyboardContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fieldScrollDelta } from "@/lib/formViewport";
 
 type Props = KeyboardAwareScrollViewProps & ScrollViewProps;
@@ -19,17 +20,20 @@ function NativeFormScrollView({ children, bottomOffset = 24, keyboardShouldPersi
   const frame = useRef<number | null>(null);
   const keyboardHeight = useKeyboardState(state => state.height);
   const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Android native measureInWindow excludes the status bar from its origin.
+  const windowOrigin = Platform.OS === "android" ? insets.top : 0;
   const ensureVisible = useCallback(() => {
     const input = focused.current;
     if (!input || !keyboardHeight) return;
     ref.current?.getNativeScrollRef()?.measureInWindow((_x, y, _w, height) => {
       input.measureInWindow((_ix, iy, _iw, ih) => {
         if (focused.current !== input || height <= 0) return;
-        const delta = fieldScrollDelta(y, height, iy, ih, windowHeight - keyboardHeight, bottomOffset);
+        const delta = fieldScrollDelta(y, height, iy, ih, windowHeight - keyboardHeight - windowOrigin, bottomOffset);
         if (Math.abs(delta) > 1) ref.current?.scrollTo({ y: Math.max(0, position.current + delta), animated: false });
       });
     });
-  }, [keyboardHeight, windowHeight, bottomOffset]);
+  }, [keyboardHeight, windowHeight, windowOrigin, bottomOffset]);
   const schedule = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     if (frame.current !== null) cancelAnimationFrame(frame.current);

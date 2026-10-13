@@ -148,6 +148,13 @@ for _ in range(8):
     time.sleep(2)
 assert any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()), 'Home not ready'
 screenshot('home')
+# Test the main-window keyboard coordinates before the longer modal scenarios.
+tap('الإعدادات')
+tap_scroll('الذكاء الاصطناعي')
+fill_field('نموذج Gemini','gemini-2.5-flash')
+screenshot('keyboard-ai-model')
+adb('shell','input','keyevent','4');time.sleep(2)
+tap('الرئيسية')
 # On short screens the manual action starts below the fixed tab bar.
 # Bring it into the visible scroll area before tapping its text node.
 scroll_body()
@@ -265,10 +272,6 @@ tap_scroll('النسخ والبيانات')
 screenshot('backup-account-link')
 assert not any('Client ID' in n.get('text','') for n in nodes()), 'Android backup exposes developer configuration'
 tap('رجوع للإعدادات')
-tap_scroll('الذكاء الاصطناعي')
-fill_field('نموذج Gemini','gemini-2.5-flash')
-screenshot('keyboard-ai-model')
-adb('shell','input','keyevent','4');time.sleep(2)
 tap_scroll('ملفي الشخصي')
 fill_field('اسمك','QA_Owner')
 fill_field('رقم الهاتف','01012345678')

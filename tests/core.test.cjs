@@ -343,3 +343,11 @@ test('provider errors distinguish invalid keys, schema rejection and outages wit
  aiFetch=async()=>({ok:false,status:400,json:async()=>({error:{message:'The specified schema has too many states; secret-key-example'}})});
  try{await assert.rejects(()=>ai.testAIConnection('gemini','test-only'),e=>/إعدادات التحليل/.test(e.message)&&!e.message.includes('secret-key-example'));}finally{aiFetch=global.fetch;}
 });
+
+const viewport=load('lib/formViewport.ts');
+test('focused fields remain inside a clipped modal viewport as well as above the keyboard',()=>{
+ assert.equal(viewport.fieldScrollDelta(0,255,296,46,388,24),111);
+ assert.equal(viewport.fieldScrollDelta(0,255,180,46,388,24),0);
+ assert.equal(viewport.fieldScrollDelta(0,255,-20,46,388,24),-44);
+ assert.equal(viewport.fieldScrollDelta(0,730,400,46,388,24),82);
+});

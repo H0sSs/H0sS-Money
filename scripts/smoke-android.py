@@ -35,6 +35,22 @@ def tap_scroll(label):
         scroll_body()
     raise RuntimeError(f'Control not reachable after scrolling: {label}')
 
+def receive_export(timeout=90):
+    # PDF rendering is asynchronous and slower on older emulator WebViews.
+    # Wait for the actual chooser instead of assuming it is ready after 5s.
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        if tap('Export QA',optional=True):
+            tap('Just once',optional=True)
+            time.sleep(3)
+            return
+        if any(n.get('text') in ['تعذر التصدير','التصدير'] and n.get('class')=='android.widget.TextView' for n in nodes()):
+            screenshot('export-error')
+            raise RuntimeError('Native export reported an error')
+        time.sleep(1)
+    screenshot('export-timeout')
+    raise RuntimeError(f'Export chooser not ready within {timeout}s')
+
 def choose_kind(index,name):
     label=f'نوع الصنف {index}: {name}'
     for attempt in range(24):
@@ -156,9 +172,7 @@ for label,name in [('الإحصائيات','stats'),('المصاريف','expense
             tap(action)
             time.sleep(5)
             screenshot('export-'+name_out+'-chooser')
-            tap('Export QA')
-            tap('Just once',optional=True)
-            time.sleep(3)
+            receive_export()
             assert 'خطأ' not in [n.get('text','') for n in nodes()], 'Export failed'
         scroll_body(); screenshot('stats-categories'); scroll_body(); screenshot('stats-comparison'); scroll_body(); screenshot('stats-comparison-full'); assert any('لا يوجد إنفاق سابق لحساب النسبة' in n.get('text','') for n in nodes()), 'Zero baseline comparison fabricated a percentage'
 for label,name in [('الحسابات والأرصدة','accounts'),('الدخل','income'),('الديون والسداد','debts'),('المصاريف المتكررة','recurring')]:
@@ -239,8 +253,8 @@ for _ in range(8):
     scroll_body()
 assert any('250.50' in n.get('text','') for n in nodes()),'Full report totals mismatch'
 screenshot('report-all-summary')
-tap_scroll('تصدير PDF');time.sleep(5)
-tap('Export QA');tap('Just once',optional=True);time.sleep(3)
+tap_scroll('تصدير PDF')
+receive_export()
 screenshot('report-exported')
 adb('shell','input','keyevent','4');time.sleep(2)
 # Restore the settings menu top before opening preferences.

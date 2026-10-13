@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { numericInput, validAmount } from "./validation";
 import { parseDate } from "./dates";
-import { quotaMessage } from "./aiErrors";
+import { apiErrorMessage } from "./aiErrors";
 
 export type AIProvider = "openai" | "gemini" | "zai";
 export type SpeechProvider = "openai" | "gemini";
@@ -32,11 +32,8 @@ async function request(url: string, init: RequestInit): Promise<any> {
     const response = await fetch(url, { ...init, signal: controller.signal });
     if (!response.ok) {
       const status = response.status;
-      if (status === 429) {
-        const body = await response.json().catch(() => null);
-        throw new Error(quotaMessage(body, response.headers?.get("retry-after")));
-      }
-      throw new Error(status === 401 || status === 403 ? "المفتاح غير صالح أو غير مسموح لهذا النموذج" : status === 404 ? "النموذج غير متاح لحسابك" : `فشلت الخدمة (${status})؛ حاول مجددًا`);
+      const body = await response.json().catch(() => null);
+      throw new Error(apiErrorMessage(status, body, response.headers?.get("retry-after")));
     }
     return await response.json();
   } catch (error) {
@@ -210,8 +207,9 @@ export function assertCleanTranscript(text:string):void {
 }
 const nullableNumber={type:'NUMBER',nullable:true};
 const nullableString={type:'STRING',nullable:true};
+// Keep the server schema compact; the validator still rejects more than 50 operations.
 const transactionSchema={type:'OBJECT',required:['transcript','intent','transactions'],properties:{
- transcript:{type:'STRING'},intent:{type:'STRING',enum:['transactions','question']},transactions:{type:'ARRAY',maxItems:50,items:{type:'OBJECT',required:['kind','amount','description','priceBasis'],properties:{
+ transcript:{type:'STRING'},intent:{type:'STRING',enum:['transactions','question']},transactions:{type:'ARRAY',items:{type:'OBJECT',required:['kind','amount','description','priceBasis'],properties:{
  kind:{type:'STRING',enum:['expense','income','debt_owed','debt_owing','repay','collect','transfer','unknown']},amount:nullableNumber,description:{type:'STRING'},categoryName:nullableString,person:nullableString,date:nullableString,note:nullableString,
  priceBasis:{type:'STRING',enum:['total','unit','ambiguous']},quantity:nullableNumber,unitPrice:nullableNumber
  }}}

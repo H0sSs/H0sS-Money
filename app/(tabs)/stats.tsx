@@ -1,3 +1,4 @@
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Text, TextInput } from "@/components/Typography";
 import PageHeader from "@/components/PageHeader";
 import { buildStatsReport } from "@/lib/statsReport";
@@ -433,7 +434,7 @@ export default function StatsScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
-      <ScrollView removeClippedSubviews={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollViewCompat removeClippedSubviews={false} contentContainerStyle={{ paddingBottom: tabBarHeight + 20, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
         <PageHeader title="صورة أوضح لإنفاقك" subtitle="تتبّع الاتجاهات واستكشف تفاصيل كل يوم وفئة" icon="bar-chart-2" actions={<>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Pressable accessibilityLabel="تصدير الإحصائيات صورة" onPress={shareAsImage} disabled={!!exporting || isLoading || compareLoading || !stats} style={[s.shareBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -565,7 +566,7 @@ export default function StatsScreen() {
         )}
         <Text style={{color:colors.textSecondary,textAlign:'center',fontFamily:'ArabicRegular',fontSize:11,marginTop:8}}>H0sS-Money · {dayCount} يومًا · العملة {currency}</Text>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
 
       <Modal visible={!!drillDate} transparent animationType="slide" onRequestClose={() => setDrillDate(null)}>
         <View style={s.drillOverlay}>
@@ -639,7 +640,7 @@ export default function StatsScreen() {
                 كل العمليات
               </Text>
             )}
-            <ScrollView style={{ maxHeight: 320 }}>
+            <KeyboardAwareScrollViewCompat style={{ maxHeight: 320 }}>
               {drillExpenses.length === 0 ? (
                 <Text style={{ color: colors.textSecondary, textAlign: "center", padding: 20, fontFamily: "ArabicRegular" }}>
                   لا توجد عمليات في هذا اليوم
@@ -654,7 +655,7 @@ export default function StatsScreen() {
                   <Text style={{ color: colors.primary, fontSize: 15, fontFamily: "ArabicBold" }}>{Number(e.amount).toFixed(2)}</Text>
                 </View>
               ))}
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>

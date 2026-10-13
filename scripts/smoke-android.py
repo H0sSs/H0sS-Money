@@ -61,6 +61,37 @@ def choose_kind(index,name):
     screenshot('kind-selection-failed')
     raise RuntimeError(f'Financial kind not selected: {label}')
 
+keyboard_checks = 0
+
+def assert_field_above_keyboard(label):
+    global keyboard_checks
+    time.sleep(.4)
+    windows = adb('shell', 'dumpsys', 'window', 'windows')
+    tops = []
+    for line in windows.splitlines():
+        if re.search(r'(?:type|mType)=ime\b', line, re.I) and re.search(r'(?:visible|mVisible)=true', line, re.I):
+            frame = re.search(r'(?:frame|mFrame)=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]', line, re.I)
+            if frame and int(frame[4]) > int(frame[2]): tops.append(int(frame[2]))
+    if not tops:
+        for block in re.split(r'(?=Window #\d+)', windows):
+            if not re.search(r'(?:InputMethod|type=INPUT_METHOD)', block): continue
+            if not re.search(r'(?:isVisible=true|mHasSurface=true)', block): continue
+            frame = re.search(r'mFrame=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]', block)
+            if frame and int(frame[4]) > int(frame[2]): tops.append(int(frame[2]))
+    current = list(nodes())
+    if not tops:
+        for n in current:
+            if 'inputmethod' not in n.get('package',''): continue
+            b = list(map(int,re.findall(r'\d+',n.get('bounds',''))))
+            if len(b)==4 and b[3]-b[1]>100: tops.append(b[1])
+    assert tops, f'Keyboard was not observable for {label}'
+    top = min(y for y in tops if y > 0)
+    target = next(n for n in current if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label and n.get('focused')=='true')
+    bounds = list(map(int,re.findall(r'\d+',target.get('bounds',''))))
+    assert bounds[3]-bounds[1]>=40 and bounds[3]<=top-4, f'Keyboard covers {label}: {bounds}, keyboard top {top}'
+    keyboard_checks += 1
+    if keyboard_checks in [1,5,10,15,20]: screenshot(f'keyboard-visible-{keyboard_checks}')
+
 def fill_field(label,value):
     for attempt in range(32):
         target=next((n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label),None)
@@ -70,6 +101,7 @@ def fill_field(label,value):
             if len(coords)==4 and coords[3]-coords[1]>=48 and height*.08<(coords[1]+coords[3])//2<height*.9:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
                 time.sleep(1)
+                assert_field_above_keyboard(label)
                 if target.get('text',''):
                     adb('shell','input','keyevent','123')
                     adb('shell','input','keyevent',*(['67']*len(target.get('text',''))))
@@ -227,6 +259,10 @@ tap('رجوع')
 tap_scroll('النسخ والبيانات')
 screenshot('backup-account-link')
 assert not any('Client ID' in n.get('text','') for n in nodes()), 'Android backup exposes developer configuration'
+tap('رجوع للإعدادات')
+tap_scroll('الذكاء الاصطناعي')
+fill_field('نموذج Gemini','gemini-2.5-flash')
+screenshot('keyboard-ai-model')
 tap('رجوع للإعدادات')
 tap_scroll('ملفي الشخصي')
 fill_field('اسمك','QA_Owner')

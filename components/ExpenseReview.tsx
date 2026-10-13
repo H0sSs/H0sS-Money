@@ -1,3 +1,4 @@
+import { KeyboardAwareScrollViewCompat, KeyboardAvoidingViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Text, TextInput } from "@/components/Typography";
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, View } from "react-native";
@@ -57,8 +58,8 @@ export default function ExpenseReview({ visible, parsed, categories, saving, col
     } catch (error) { Alert.alert('راجع العمليات', error instanceof Error ? error.message : 'أكمل البيانات'); } finally {setChecking(false);}
   }
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={() => { if (!saving&&!checking&&!reanalysing) onCancel(); }}>
-    <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000080' }}>
-      <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: '78%' }} contentContainerStyle={{ padding: 20, paddingBottom: 20 + insets.bottom, backgroundColor: c.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
+    <KeyboardAvoidingViewCompat style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000080' }}>
+      <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled" style={{ maxHeight: '78%' }} contentContainerStyle={{ padding: 20, paddingBottom: 20 + insets.bottom, backgroundColor: c.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
         <Text style={{ ...text, fontFamily: 'ArabicBold', fontSize: 22, marginBottom: 12 }}>مراجعة العمليات — {items.length} صنف</Text>
         {!!parsed?.[0]?.transcript && <View style={{ padding: 12, borderRadius: 12, backgroundColor: c.surfaceAlt, marginBottom: 16 }}>
           <Text style={{ ...label, fontFamily: 'ArabicBold' }}>النص المسموع</Text><Text style={text} numberOfLines={expandedTranscript?undefined:4}>{parsed[0].transcript}</Text><Pressable accessibilityRole="button" onPress={()=>setExpandedTranscript(v=>!v)} style={{paddingVertical:10}}><Text style={{...text,color:c.primary}}>{expandedTranscript?"اختصار النص":"عرض النص كاملًا"}</Text></Pressable>
@@ -92,11 +93,11 @@ export default function ExpenseReview({ visible, parsed, categories, saving, col
           <TextInput accessibilityLabel={`ملاحظة الصنف ${i + 1}`} editable={!saving&&!checking&&!reanalysing} style={input} value={item.note} onChangeText={note => patch(i, { note })} maxLength={1000} />
         </View>)}
         <Pressable disabled={saving || checking || reanalysing || items.length >= 50} onPress={() => setItems(previous => [...previous, {kind:'expense',person:'',debtId:null,toAccountId:null, amount: '', description: '', note: '', categoryId: null, date: localDate(), accountId: 0 }])} style={{ padding: 14, borderWidth: 1, borderColor: c.primary, borderRadius: 14, marginBottom: 16 }}><Text style={{ ...text, color: c.primary, textAlign: 'center' }}>إضافة صنف آخر</Text></Pressable>
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
         <View style={{ flexDirection: 'row', gap: 12, padding:16, paddingBottom:16+insets.bottom, backgroundColor:c.surface }}>
           <Pressable disabled={saving||checking||reanalysing} onPress={onCancel} style={{ flex: 1, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: c.border }}><Text style={{ ...text, textAlign: 'center' }}>إلغاء</Text></Pressable>
           <Pressable disabled={saving||checking||reanalysing} onPress={save} style={{ flex: 1, padding: 16, borderRadius: 14, backgroundColor: c.primary }}>{saving ? <ActivityIndicator color={c.buttonText} /> : <Text style={{ ...text, color: c.buttonText, fontFamily: 'ArabicBold', textAlign: 'center' }}>حفظ</Text>}</Pressable>
         </View>
-    </View>
+    </KeyboardAvoidingViewCompat>
   </Modal>;
 }

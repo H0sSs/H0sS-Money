@@ -53,7 +53,11 @@ def fill_field(label,value):
             height=int(re.findall(r'\d+x(\d+)',adb('shell','wm','size'))[-1])
             if len(coords)==4 and coords[3]-coords[1]>=48 and height*.08<(coords[1]+coords[3])//2<height*.9:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
-                time.sleep(1);adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
+                time.sleep(1)
+                if target.get('text',''):
+                    adb('shell','input','keyevent','123')
+                    adb('shell','input','keyevent',*(['67']*len(target.get('text',''))))
+                adb('shell','input','text',value);time.sleep(.5);adb('shell','input','keyevent','4');time.sleep(.5)
                 entered=next(n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label)
                 assert entered.get('text')==value,f'Incorrect input: {label}'
                 return

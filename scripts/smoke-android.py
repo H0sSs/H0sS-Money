@@ -67,28 +67,33 @@ def assert_field_above_keyboard(label):
     global keyboard_checks
     time.sleep(.4)
     windows = adb('shell', 'dumpsys', 'window', 'windows')
-    tops = []
-    for line in windows.splitlines():
-        if re.search(r'(?:type|mType)=ime\b', line, re.I) and re.search(r'(?:visible|mVisible)=true', line, re.I):
-            frame = re.search(r'(?:frame|mFrame)=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]', line, re.I)
-            if frame and int(frame[4]) > int(frame[2]): tops.append(int(frame[2]))
-    if not tops:
-        for block in re.split(r'(?=Window #\d+)', windows):
-            if not re.search(r'(?:InputMethod|type=INPUT_METHOD)', block): continue
-            if not re.search(r'(?:isVisible=true|mHasSurface=true)', block): continue
-            frame = re.search(r'mFrame=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]', block)
-            if frame and int(frame[4]) > int(frame[2]): tops.append(int(frame[2]))
+    method = adb('shell', 'dumpsys', 'input_method')
     current = list(nodes())
-    if not tops:
-        for n in current:
-            if 'inputmethod' not in n.get('package',''): continue
-            b = list(map(int,re.findall(r'\d+',n.get('bounds',''))))
-            if len(b)==4 and b[3]-b[1]>100: tops.append(b[1])
-    assert tops, f'Keyboard was not observable for {label}'
-    top = min(y for y in tops if y > 0)
+    # The IME window may be full-screen. Its visibleTopInsets identifies the
+    # actual keyboard content, relative to that window (not its empty area).
+    screen_height = int(re.findall(r'\d+x(\d+)', adb('shell','wm','size'))[-1])
+    visible = [int(x) for x in re.findall(r'visibleTopInsets=(\d+)', method)]
+    visible = [x for x in visible if 0 < x < screen_height]
+    origin = 0
+    for block in re.split(r'(?=Window #\d+)', windows):
+        if not re.search(r'(?:InputMethod|type=INPUT_METHOD)', block): continue
+        frame = re.search(r'(?:mFrame|frame)=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]', block)
+        if frame and 0 <= int(frame[2]) < screen_height*.2:
+            origin = int(frame[2]); break
+    if not visible:
+        Path('smoke/keyboard-window.txt').write_text(windows)
+        Path('smoke/keyboard-method.txt').write_text(method)
+        screenshot('keyboard-measurement-failed')
+        raise AssertionError(f'Visible keyboard insets unavailable for {label}')
+    top = origin + max(visible)
+    assert 0 < top < screen_height, f'Invalid keyboard content top: {top}'
     target = next(n for n in current if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label and n.get('focused')=='true')
     bounds = list(map(int,re.findall(r'\d+',target.get('bounds',''))))
-    assert bounds[3]-bounds[1]>=40 and bounds[3]<=top-4, f'Keyboard covers {label}: {bounds}, keyboard top {top}'
+    if not (bounds[3]-bounds[1]>=40 and bounds[3]<=top-4):
+        Path('smoke/keyboard-window.txt').write_text(windows)
+        Path('smoke/keyboard-method.txt').write_text(method)
+        screenshot('keyboard-overlap')
+        raise AssertionError(f'Keyboard covers {label}: {bounds}, keyboard content top {top}')
     keyboard_checks += 1
     if keyboard_checks in [1,5,10,15,20]: screenshot(f'keyboard-visible-{keyboard_checks}')
 

@@ -1,9 +1,8 @@
 name: Validate and build release APK
 on:
   push:
-    branches: [main, master, fix/complete-reports-1.2.5]
+    branches: [main, master]
     paths-ignore: ['README.md', 'CHANGELOG.md', 'docs/**']
-    # The implementation branch is checked before merging.
   pull_request:
   workflow_dispatch:
 permissions:
@@ -12,7 +11,67 @@ concurrency:
   group: apk-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      code: ${{ steps.meta.outputs.code }}
+      base_tag: ${{ steps.meta.outputs.base_tag }}
+      base_version: ${{ steps.meta.outputs.base_version }}
+      base_code: ${{ steps.meta.outputs.base_code }}
+      published: ${{ steps.meta.outputs.published }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve the latest public release and target version
+        id: meta
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > latest-release.json
+          python3 scripts/verify-build-base.py prepare --release-json latest-release.json
+      - name: Check native compatibility against the latest release tag
+        env:
+          HOSS_BASE_TAG: ${{ steps.meta.outputs.base_tag }}
+        run: python3 scripts/check-native-reuse.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
+          log-accepted-android-sdk-licenses: false
+      - name: Download only the latest release APKs
+        env:
+          BASE_TAG: ${{ steps.meta.outputs.base_tag }}
+          BASE_VERSION: ${{ steps.meta.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          for VARIANT in arm64 universal; do
+            DIR="base-apks/H0sS-Money-release-$VARIANT"
+            mkdir -p "$DIR"
+            gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "H0sS-Money-$BASE_VERSION-$VARIANT.apk" --dir "$DIR"
+          done
+      - name: Verify base checksums, certificate, version and alignment
+        run: |
+          python3 scripts/verify-build-base.py verify
+          cp build-base.json base-apks/build-base.json
+      - uses: actions/upload-artifact@v4
+        if: steps.meta.outputs.published != 'true'
+        with:
+          name: verified-base-apks
+          path: base-apks/
+          if-no-files-found: error
+      - name: Keep the existing public release unchanged
+        if: steps.meta.outputs.published == 'true'
+        run: echo 'Published application source is unchanged; compatibility verified. No APK rebuild or release overwrite needed.'
   validate:
+    needs: compatibility
+    if: needs.compatibility.outputs.published != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,14 +92,15 @@ jobs:
           path: /tmp/hoss-index.android.bundle
           if-no-files-found: error
   build:
-    needs: validate
+    needs: [compatibility, validate]
+    if: needs.compatibility.outputs.published != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      HOSS_APK_VERSION: '1.2.5'
-      HOSS_VERSION_CODE: '8'
-      HOSS_BASE_VERSION: '1.2.4'
-      HOSS_BASE_CODE: '7'
+      HOSS_APK_VERSION: ${{ needs.compatibility.outputs.version }}
+      HOSS_VERSION_CODE: ${{ needs.compatibility.outputs.code }}
+      HOSS_BASE_VERSION: ${{ needs.compatibility.outputs.base_version }}
+      HOSS_BASE_CODE: ${{ needs.compatibility.outputs.base_code }}
       HOSS_CERTIFICATE_SHA256: '8967c433f04f9e2879f88a95f92c95d268316163d84db3442ef221f415fae91c'
       HOSS_KEYSTORE_PASSWORD: ${{ secrets.HOSS_KEYSTORE_PASSWORD }}
       HOSS_KEY_ALIAS: ${{ secrets.HOSS_KEY_ALIAS }}
@@ -58,24 +118,17 @@ jobs:
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0
           log-accepted-android-sdk-licenses: false
-      - name: Verify JS-only native compatibility
-        run: python3 scripts/check-native-reuse.py
       - uses: actions/download-artifact@v4
         with:
           name: checked-hermes-bundle
           path: /tmp/checked-hermes
-      - name: Prepare checked bundle and verified public base APKs
-        run: |
-          set -euo pipefail
-          cp /tmp/checked-hermes/*.bundle /tmp/hoss-index.android.bundle
-          for VARIANT in arm64 universal; do
-            DIR="base-apks/H0sS-Money-release-$VARIANT"
-            mkdir -p "$DIR"
-            gh release download v1.2.4 --repo "$GITHUB_REPOSITORY" --pattern "H0sS-Money-1.2.4-$VARIANT.apk" --dir "$DIR"
-          done
-          printf '%s  %s\n' '92639951945e845a8fded99e79549a28c8841b8608087c7bd9f4204bf278cefd' 'H0sS-Money-1.2.4-arm64.apk' > base-apks/H0sS-Money-release-arm64/SHA256SUMS.txt
-          printf '%s  %s\n' '2f5ea69d66796ea745a87aca80307fd91637409759d6d7515aa007a1cae58628' 'H0sS-Money-1.2.4-universal.apk' > base-apks/H0sS-Money-release-universal/SHA256SUMS.txt
-      - name: Sign version 1.2.5 with the private release key
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-base-apks
+          path: base-apks
+      - name: Prepare the checked optimized bytecode
+        run: cp /tmp/checked-hermes/*.bundle /tmp/hoss-index.android.bundle
+      - name: Sign checked APKs with the private release key
         env:
           KEYSTORE_BASE64: ${{ secrets.HOSS_KEYSTORE_BASE64 }}
         run: |
@@ -134,13 +187,15 @@ jobs:
           if-no-files-found: ignore
 
   publish:
-    needs: [validate, build, smoke]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [compatibility, validate, build, smoke]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.compatibility.outputs.published != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     env:
+      VERSION: ${{ needs.compatibility.outputs.version }}
+      VERSION_CODE: ${{ needs.compatibility.outputs.code }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -160,9 +215,9 @@ jobs:
             DIR="downloads/H0sS-Money-release-$VARIANT"
             grep -q 'Private H0sS-Money release certificate' "$DIR/SIGNING-NOTE.txt"
             grep -q '8967c433f04f9e2879f88a95f92c95d268316163d84db3442ef221f415fae91c' "$DIR/signature.txt"
-            grep -q "versionName='1.2.5'" "$DIR/package.txt"
-            grep -q "versionCode='8'" "$DIR/package.txt"
-            APK="$DIR/H0sS-Money-1.2.5-$VARIANT.apk"
+            grep -q "versionName='$VERSION'" "$DIR/package.txt"
+            grep -q "versionCode='$VERSION_CODE'" "$DIR/package.txt"
+            APK="$DIR/H0sS-Money-$VERSION-$VARIANT.apk"
             EXPECTED=$(awk '{print $1}' "$DIR/SHA256SUMS.txt")
             ACTUAL=$(sha256sum "$APK" | awk '{print $1}')
             [ "$EXPECTED" = "$ACTUAL" ]
@@ -173,17 +228,19 @@ jobs:
             grep -q '^PASS:' "qa/android-smoke-evidence-api-$API/exports-result.txt"
           done
           (cd delivery && sha256sum *.apk > SHA256SUMS.txt)
-          cp docs/RELEASE-1.2.5.md delivery/H0sS-Money-1.2.5-Report.md
-          printf '\nSource: %s\nBuild: https://github.com/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> delivery/H0sS-Money-1.2.5-Report.md
+          cp docs/RELEASE-$VERSION.md delivery/H0sS-Money-$VERSION-Report.md
+          printf '\nSource: %s\nBuild: https://github.com/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> delivery/H0sS-Money-$VERSION-Report.md
           python3 - <<'PY'
           import pathlib,zipfile
-          with zipfile.ZipFile('delivery/H0sS-Money-1.2.5-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as z:
+          import os
+          version=os.environ['VERSION']
+          with zipfile.ZipFile('delivery/H0sS-Money-'+version+'-UI-QA.zip','w',zipfile.ZIP_DEFLATED) as z:
             for p in sorted(pathlib.Path('qa').rglob('*')):
               if p.is_file() and p.suffix in ['.png','.pdf','.mp4','.xml','.txt'] and p.name!='logcat.txt':z.write(p,p.relative_to('qa'))
           PY
       - name: Publish verified APKs
         run: |
           set -euo pipefail
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v1.2.5" >/dev/null 2>&1; then echo 'Release already exists; refusing overwrite.'; exit 1; fi
-          gh release create v1.2.5 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'H0sS-Money 1.2.5' --notes-file delivery/H0sS-Money-1.2.5-Report.md delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-1.2.5-Report.md delivery/H0sS-Money-1.2.5-UI-QA.zip
-          gh release edit v1.2.5 --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$VERSION" >/dev/null 2>&1; then echo 'Release already exists; refusing overwrite.'; exit 1; fi
+          gh release create v$VERSION --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "H0sS-Money $VERSION" --notes-file delivery/H0sS-Money-$VERSION-Report.md delivery/*.apk delivery/SHA256SUMS.txt delivery/H0sS-Money-$VERSION-Report.md delivery/H0sS-Money-$VERSION-UI-QA.zip
+          gh release edit v$VERSION --repo "$GITHUB_REPOSITORY" --draft=false --latest

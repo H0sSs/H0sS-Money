@@ -1,6 +1,7 @@
+import { KeyboardAwareScrollViewCompat, KeyboardAvoidingViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Text, TextInput } from "@/components/Typography";
 import React, { useState } from 'react';
-import { View, Pressable, ScrollView, Modal, Alert, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Pressable, ScrollView, Modal, Alert, Switch, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -50,7 +51,7 @@ export default function FinanceScreen(){
  }
  const hints:Record<string,string>={ledger:'إيراداتك ومصروفاتك وصافي الفترة في جدول واحد.',expense:'إضافة مصروف',accounts:'الرصيد = الافتتاحي + الدخل − المصروفات + صافي التحويلات. كل الحسابات تستخدم عملة العرض نفسها.',income:'سجّل دخلك واختر الحساب المستلم. الدخل منفصل عن إحصائيات المصاريف.',debts:'تسجيل أصل الدين للتتبع فقط؛ لا يغيّر الرصيد. السداد يسجّل مصروفًا أو دخلًا حسب اتجاه الدين.',recurring:'المصروفات المستحقة تُسجّل عند فتح التطبيق إذا فعّلت التلقائي. لا يوجد تنفيذ أثناء إغلاق التطبيق.'};
  return <View style={{flex:1,paddingTop:insets.top,backgroundColor:c.background}}>
-  <ScrollView contentContainerStyle={{paddingBottom:insets.bottom+24}} keyboardShouldPersistTaps="handled">
+  <KeyboardAwareScrollViewCompat contentContainerStyle={{paddingBottom:insets.bottom+24}} keyboardShouldPersistTaps="handled">
    <PageHeader title={titles[current]} subtitle={hints[current]} icon="credit-card" actions={<Pressable accessibilityLabel="رجوع" onPress={()=>router.back()} style={{padding:12}}><Icon name="arrow-left" size={22} color={c.text}/></Pressable>}/>
    <View style={{paddingHorizontal:16}}>
     {current==='ledger'?<Ledger accounts={accounts} currency={currency} onIncome={()=>open('income')} onExpense={()=>open('expense')}/>:button(current==='accounts'?'إضافة حساب':current==='income'?'إضافة دخل':current==='debts'?'إضافة دين':'إضافة مصروف متكرر',()=>open(current))}
@@ -60,10 +61,10 @@ export default function FinanceScreen(){
     {current==='debts'&&<>{debtsLoading?<ActivityIndicator color={c.primary}/>:!debts.length?<Text style={text}>لا توجد ديون مسجّلة.</Text>:debts.map(d=><View key={d.id} style={card}><Text style={{...text,fontFamily:'ArabicBold'}}>{d.person} · {d.direction==='owing'?'عليك':'لك'}</Text><Text style={{...text,color:c.primary,fontSize:22}}>المتبقي: {Math.max(0,d.amount-d.paid).toFixed(2)} {currency}</Text><Text style={{...text,color:c.textSecondary}}>الأصل {d.amount.toFixed(2)} · المسدد {d.paid.toFixed(2)}</Text>{!!d.note&&<Text style={text}>{d.note}</Text>}<View style={{flexDirection:'row',gap:8}}>{button('السداد والسجل',()=>open('pay',d))}{button('تعديل',()=>open('debts',d),true)}{button('حذف',()=>remove('حذف الدين غير المسدد؟',()=>F.deleteDebt(d.id)),true)}</View></View>)}</>}
     {current==='recurring'&&<><View style={card}><Text style={text}>التسجيل التلقائي عند فتح التطبيق</Text><Switch accessibilityLabel="تفعيل التسجيل التلقائي" value={auto} onValueChange={v=>run(()=>updateSetting('recurringAuto',String(v)),false)}/><Text style={{...text,color:c.textSecondary}}>تفعيل هذا الخيار قد يسجل عدة استحقاقات فاتت. راجع تواريخ القوالب أولًا.</Text>{button('تسجيل المستحقات الآن',()=>run(async()=>{const n=await F.postRecurring();Alert.alert('تم',`سُجّلت ${n} عملية مستحقة`);},false),true)}</View>{!recurring.length?<Text style={text}>أضف اشتراكًا أو فاتورة أسبوعية أو شهرية.</Text>:recurring.map(r=><View key={r.id} style={card}><Text style={{...text,fontFamily:'ArabicBold'}}>{r.description}</Text><Text style={text}>{r.amount.toFixed(2)} {currency} · {r.cadence==='monthly'?'شهري':'أسبوعي'}</Text><Text style={{...text,color:c.textSecondary}}>الاستحقاق التالي: {r.next_date}</Text><Switch accessibilityLabel={`تفعيل ${r.description}`} value={!!r.enabled} onValueChange={v=>run(()=>F.toggleRecurring(r.id,v),false)}/><View style={{flexDirection:'row',gap:12}}>{button('تعديل',()=>open('recurring',r),true)}{button('حذف القالب',()=>remove('حذف القالب لا يحذف المصاريف السابقة.',()=>F.deleteRecurring(r.id)),true)}</View></View>)}</>}
    </View>
-  </ScrollView>
+  </KeyboardAwareScrollViewCompat>
   <Modal visible={!!form} animationType="slide" onRequestClose={()=>!busy&&setForm(null)}>
-   <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':undefined} style={{flex:1,backgroundColor:c.background,paddingTop:insets.top}}>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:20,paddingBottom:insets.bottom+40,gap:14}}>
+   <KeyboardAvoidingViewCompat style={{flex:1,backgroundColor:c.background,paddingTop:insets.top}}>
+    <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:20,paddingBottom:insets.bottom+40,gap:14}}>
      <Text style={{...text,fontFamily:'ArabicBold',fontSize:23}}>{form==='pay'?'سداد أو تحصيل':form==='transfer'?'تحويل بين الحسابات':titles[form??'accounts']}</Text>
      {form!=='pay'&&form!=='transfer'&&field(form==='accounts'?'اسم الحساب':form==='debts'?'اسم الشخص':'الوصف',description,setDescription)}
      {!(form==='accounts'&&target)&&field(form==='accounts'?'الرصيد الافتتاحي':form==='pay'?'مبلغ السداد':'المبلغ',value,setValue,true)}
@@ -77,8 +78,8 @@ export default function FinanceScreen(){
      {form==='pay'&&<><Text style={text}>المتبقي: {target?Math.max(0,(debts.find(d=>d.id===target.id)?.amount??target.amount)-(debts.find(d=>d.id===target.id)?.paid??target.paid)).toFixed(2):'0'} {currency}</Text>{payments.map(p=><View key={p.id} style={card}><Text style={text}>{p.date} · {p.amount.toFixed(2)} {currency}</Text>{button('حذف السداد وتحديث الرصيد',()=>remove('سيُحذف أيضًا المصروف أو الدخل المرتبط.',()=>F.deleteDebtPayment(p.id)),true)}</View>)}</>}
      {busy?<ActivityIndicator color={c.primary}/>:button('حفظ',()=>run(save))}
      {button('إلغاء',()=>setForm(null),true)}
-    </ScrollView>
-   </KeyboardAvoidingView>
+    </KeyboardAwareScrollViewCompat>
+   </KeyboardAvoidingViewCompat>
   </Modal>
  </View>;
 }

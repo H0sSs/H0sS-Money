@@ -1,3 +1,4 @@
+import { KeyboardAwareScrollViewCompat, KeyboardAvoidingViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Text, TextInput } from "@/components/Typography";
 import Constants from "expo-constants";
 import BackupStatus from "@/components/BackupStatus";
@@ -75,8 +76,8 @@ function CategoryModal({ visible, category, colors, saving, onClose, onSave }: C
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={s.overlay}>
-        <ScrollView>
+      <KeyboardAvoidingViewCompat style={s.overlay}>
+        <KeyboardAwareScrollViewCompat>
           <View style={[s.sheet, { backgroundColor: colors.surface }]}>
             <View style={[s.handle, { backgroundColor: colors.border }]} />
             <Text style={[s.sheetTitle, { color: colors.text }]}>{category ? "تعديل الفئة" : "فئة جديدة"}</Text>
@@ -122,8 +123,8 @@ function CategoryModal({ visible, category, colors, saving, onClose, onSave }: C
               </Pressable>
             </View>
           </View>
-        </ScrollView>
-      </View>
+        </KeyboardAwareScrollViewCompat>
+      </KeyboardAvoidingViewCompat>
     </Modal>
   );
 }
@@ -161,8 +162,8 @@ function ExpenseModal({ visible, expense, categories, colors, saving, onClose, o
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={s.overlay}>
-        <ScrollView>
+      <KeyboardAvoidingViewCompat style={s.overlay}>
+        <KeyboardAwareScrollViewCompat>
           <View style={[s.sheet, { backgroundColor: colors.surface }]}>
             <View style={[s.handle, { backgroundColor: colors.border }]} />
             <Text style={[s.sheetTitle, { color: colors.text }]}>{expense ? "تعديل المصروف" : "إضافة مصروف"}</Text>
@@ -214,8 +215,8 @@ function ExpenseModal({ visible, expense, categories, colors, saving, onClose, o
               </Pressable>
             </View>
           </View>
-        </ScrollView>
-      </View>
+        </KeyboardAwareScrollViewCompat>
+      </KeyboardAvoidingViewCompat>
     </Modal>
   );
 }
@@ -494,15 +495,15 @@ export default function AdminScreen() {
   };
   const aiProvider = settings?.aiProvider ?? "openai";
   const logoUri = settings?.logoBase64 || settings?.logoUri || null;
-  if(panel==='home')return <View style={[s.container,{backgroundColor:colors.background,paddingTop:insets.top}]}><ScrollView contentContainerStyle={{paddingBottom:tabBarHeight+20}}><PageHeader title="الإعدادات" subtitle="اختر القسم الذي تريد إدارته" icon="settings"/>
+  if(panel==='home')return <View style={[s.container,{backgroundColor:colors.background,paddingTop:insets.top}]}><KeyboardAwareScrollViewCompat contentContainerStyle={{paddingBottom:tabBarHeight+20}}><PageHeader title="الإعدادات" subtitle="اختر القسم الذي تريد إدارته" icon="settings"/>
    {[{title:'الأموال',rows:[['الإيرادات والمصروفات','ledger','grid'],['الحسابات والأرصدة','accounts','credit-card'],['الدخل','income','trending-up'],['الديون والسداد','debts','users'],['المصاريف المتكررة','recurring','repeat']]},{title:'التطبيق',rows:[['الميزانيات والفئات','money','tag'],['الذكاء الاصطناعي','ai','cpu'],['النسخ والبيانات','backup','database'],['المظهر والأمان','settings','shield'],['ملفي الشخصي','profile','user'],['التقرير المالي الشامل','reports','file-text'],['دليل الاستخدام','guide','book-open'],['فحص البيانات والتراجع','data-tools','shield']]}].map(group=><View key={group.title} style={{paddingHorizontal:16,marginBottom:16}}><Text style={{color:colors.textSecondary,fontFamily:'ArabicBold',textAlign:'right',marginBottom:10}}>{group.title}</Text><View style={{borderRadius:18,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border}}>{group.rows.map(([label,id,icon],i)=><Pressable key={id} onPress={()=>router.push({pathname:['ledger','accounts','income','debts','recurring'].includes(id)?'/finance':['profile','reports','guide','data-tools'].includes(id)?('/'+id) as any:'/settings',params:['ledger','accounts','income','debts','recurring'].includes(id)?{section:id}:{panel:id}})} style={{flexDirection:'row',alignItems:'center',gap:12,padding:16,borderTopWidth:i?1:0,borderColor:colors.border}}><Icon name="chevron-left" size={18} color={colors.textSecondary}/><Text style={{flex:1,textAlign:'right',color:colors.text,fontFamily:'ArabicBold'}}>{label}</Text><Icon name={icon} size={20} color={colors.primary}/></Pressable>)}</View></View>)}
    <Text style={{color:colors.textSecondary,textAlign:'center',fontFamily:'ArabicRegular',fontSize:12}}>H0sS-Money {Constants.expoConfig?.version ?? '1.2.3'} · بياناتك محفوظة محليًا</Text>
-  </ScrollView></View>;
+  </KeyboardAwareScrollViewCompat></View>;
 
 
   return (
     <View style={[s.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollViewCompat contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }} showsVerticalScrollIndicator={false}>
         <PageHeader title={panel==='money'?'الميزانيات والفئات':panel==='ai'?'الذكاء الاصطناعي':panel==='backup'?'النسخ والبيانات':'المظهر والأمان'} subtitle="إعدادات واضحة، وكل تغيير محفوظ على جهازك" icon="settings" actions={<Pressable accessibilityLabel="رجوع للإعدادات" onPress={()=>router.back()} style={{padding:12}}><Icon name="arrow-left" size={22} color={colors.text}/></Pressable>} />
 
         {(panel === "all" || panel === "settings") && <>
@@ -806,7 +807,7 @@ export default function AdminScreen() {
           ))}
         </View>
         </>}
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
 
       <CategoryModal
         visible={catModal}
@@ -829,7 +830,7 @@ export default function AdminScreen() {
 
       {/* Drive backup picker modal */}
       <Modal visible={driveModal} transparent animationType="slide" onRequestClose={() => setDriveModal(false)}>
-        <View style={s.overlay}>
+        <KeyboardAvoidingViewCompat style={s.overlay}>
           <View style={[s.sheet, { backgroundColor: colors.surface, maxHeight: "80%" }]}>
             <View style={[s.handle, { backgroundColor: colors.border }]} />
             <Text style={[s.sheetTitle, { color: colors.text }]}>اختر النسخة للاسترجاع</Text>
@@ -840,7 +841,7 @@ export default function AdminScreen() {
                 لا توجد نسخ احتياطية على Drive
               </Text>
             ) : (
-              <ScrollView style={{ maxHeight: 420 }}>
+              <KeyboardAwareScrollViewCompat style={{ maxHeight: 420 }}>
                 {driveFiles.map((f) => (
                   <View key={f.id} style={[s.driveRow, { borderBottomColor: colors.border }]}>
                     <Pressable onPress={() => askRestoreMode(f)} style={{ flex: 1 }}>
@@ -855,7 +856,7 @@ export default function AdminScreen() {
                     </Pressable>
                   </View>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollViewCompat>
             )}
             <Pressable
               style={[s.cancelBtn, { borderColor: colors.border, marginTop: 14 }]}
@@ -864,12 +865,12 @@ export default function AdminScreen() {
               <Text style={[s.cancelText, { color: colors.textSecondary }]}>إغلاق</Text>
             </Pressable>
           </View>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
 
       {/* Notification log full modal */}
       <Modal visible={logModal} transparent animationType="slide" onRequestClose={() => setLogModal(false)}>
-        <View style={s.overlay}>
+        <KeyboardAvoidingViewCompat style={s.overlay}>
           <View style={[s.sheet, { backgroundColor: colors.surface, maxHeight: "85%" }]}>
             <View style={[s.handle, { backgroundColor: colors.border }]} />
             <Text style={[s.sheetTitle, { color: colors.text }]}>سجل التنبيهات ({notifLog.length})</Text>
@@ -878,7 +879,7 @@ export default function AdminScreen() {
                 لا توجد تنبيهات
               </Text>
             ) : (
-              <ScrollView style={{ maxHeight: 480 }}>
+              <KeyboardAwareScrollViewCompat style={{ maxHeight: 480 }}>
                 {notifLog.map((n) => (
                   <View key={n.id} style={[s.logFullRow, { borderBottomColor: colors.border }]}>
                     <Text style={{ color: colors.text, fontSize: 13, fontFamily: "ArabicBold" }}>{n.title}</Text>
@@ -888,7 +889,7 @@ export default function AdminScreen() {
                     </Text>
                   </View>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollViewCompat>
             )}
             <Pressable
               style={[s.cancelBtn, { borderColor: colors.border, marginTop: 14 }]}
@@ -897,7 +898,7 @@ export default function AdminScreen() {
               <Text style={[s.cancelText, { color: colors.textSecondary }]}>إغلاق</Text>
             </Pressable>
           </View>
-        </View>
+        </KeyboardAvoidingViewCompat>
       </Modal>
     </View>
   );

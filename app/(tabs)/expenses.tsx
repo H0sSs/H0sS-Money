@@ -1,3 +1,4 @@
+import { KeyboardAwareScrollViewCompat, KeyboardAvoidingViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Text, TextInput } from "@/components/Typography";
 import {getAccounts} from "@/lib/finance";
 import PageHeader from "@/components/PageHeader";
@@ -71,8 +72,8 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={s.overlay}>
-        <ScrollView keyboardShouldPersistTaps="handled" style={{maxHeight:"90%"}} contentContainerStyle={[s.sheet, { backgroundColor: colors.surface }]}>
+      <KeyboardAvoidingViewCompat style={s.overlay}>
+        <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled" style={{maxHeight:"90%"}} contentContainerStyle={[s.sheet, { backgroundColor: colors.surface }]}>
           <View style={[s.handle, { backgroundColor: colors.border }]} />
           <Text style={[s.sheetTitle, { color: colors.text }]}>تعديل المصروف</Text>
 
@@ -116,8 +117,8 @@ function EditExpenseModal({ visible, expense, categories, colors, saving, onClos
               {saving ? <ActivityIndicator size="small" color={colors.background} /> : <Text style={[s.saveText, { color: colors.buttonText }]}>حفظ</Text>}
             </Pressable>
           </View>
-        </ScrollView>
-      </View>
+        </KeyboardAwareScrollViewCompat>
+      </KeyboardAvoidingViewCompat>
     </Modal>
   );
 }

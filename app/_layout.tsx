@@ -1,3 +1,4 @@
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import StartupScreen from "@/components/StartupScreen";
 import { STARTUP_BACKGROUND } from "@/lib/startup";
 import { Text } from "@/components/Typography";
@@ -219,11 +220,13 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary onError={revealFirstFrame}>
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent preload={false}>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider initialTheme={initialTheme}>
             <View style={{flex:1,backgroundColor:initialTheme==='light'?LightColors.background:DarkColors.background}} onLayout={revealFirstFrame}><ThemedNavigator /></View>
           </ThemeProvider>
         </QueryClientProvider>
+        </KeyboardProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

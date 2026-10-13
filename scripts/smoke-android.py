@@ -61,6 +61,42 @@ def choose_kind(index,name):
     screenshot('kind-selection-failed')
     raise RuntimeError(f'Financial kind not selected: {label}')
 
+keyboard_checks = 0
+
+def assert_field_above_keyboard(label):
+    global keyboard_checks
+    time.sleep(.4)
+    windows = adb('shell', 'dumpsys', 'window', 'windows')
+    method = adb('shell', 'dumpsys', 'input_method')
+    current = list(nodes())
+    # The IME window may be full-screen. Its visibleTopInsets identifies the
+    # actual keyboard content, relative to that window (not its empty area).
+    screen_height = int(re.findall(r'\d+x(\d+)', adb('shell','wm','size'))[-1])
+    visible = [int(x) for x in re.findall(r'visibleTopInsets=(\d+)', method)]
+    visible = [x for x in visible if 0 < x < screen_height]
+    origin = 0
+    for block in re.split(r'(?=Window #\d+)', windows):
+        if not re.search(r'(?:InputMethod|type=INPUT_METHOD)', block): continue
+        frame = re.search(r'(?:mFrame|frame)=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]', block)
+        if frame and 0 <= int(frame[2]) < screen_height*.2:
+            origin = int(frame[2]); break
+    if not visible:
+        Path('smoke/keyboard-window.txt').write_text(windows)
+        Path('smoke/keyboard-method.txt').write_text(method)
+        screenshot('keyboard-measurement-failed')
+        raise AssertionError(f'Visible keyboard insets unavailable for {label}')
+    top = origin + max(visible)
+    assert 0 < top < screen_height, f'Invalid keyboard content top: {top}'
+    target = next(n for n in current if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label and n.get('focused')=='true')
+    bounds = list(map(int,re.findall(r'\d+',target.get('bounds',''))))
+    if not (bounds[3]-bounds[1]>=40 and bounds[3]<=top-4):
+        Path('smoke/keyboard-window.txt').write_text(windows)
+        Path('smoke/keyboard-method.txt').write_text(method)
+        screenshot('keyboard-overlap')
+        raise AssertionError(f'Keyboard covers {label}: {bounds}, keyboard content top {top}')
+    keyboard_checks += 1
+    if keyboard_checks in [1,5,10,15,20]: screenshot(f'keyboard-visible-{keyboard_checks}')
+
 def fill_field(label,value):
     for attempt in range(32):
         target=next((n for n in nodes() if n.get('class')=='android.widget.EditText' and n.get('content-desc')==label),None)
@@ -70,6 +106,7 @@ def fill_field(label,value):
             if len(coords)==4 and coords[3]-coords[1]>=48 and height*.08<(coords[1]+coords[3])//2<height*.9:
                 adb('shell','input','tap',str((coords[0]+coords[2])//2),str((coords[1]+coords[3])//2))
                 time.sleep(1)
+                assert_field_above_keyboard(label)
                 if target.get('text',''):
                     adb('shell','input','keyevent','123')
                     adb('shell','input','keyevent',*(['67']*len(target.get('text',''))))
@@ -111,6 +148,13 @@ for _ in range(8):
     time.sleep(2)
 assert any(n.get('text')=='مصروفك تحت السيطرة' for n in nodes()), 'Home not ready'
 screenshot('home')
+# Test the main-window keyboard coordinates before the longer modal scenarios.
+tap('الإعدادات')
+tap_scroll('الذكاء الاصطناعي')
+fill_field('نموذج Gemini','gemini-2.5-flash')
+screenshot('keyboard-ai-model')
+adb('shell','input','keyevent','4');time.sleep(2)
+tap('الرئيسية')
 # On short screens the manual action starts below the fixed tab bar.
 # Bring it into the visible scroll area before tapping its text node.
 scroll_body()

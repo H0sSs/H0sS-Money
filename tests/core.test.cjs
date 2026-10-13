@@ -323,3 +323,31 @@ test('strict financial responses reject missing intent and uncertain schema with
  assert.throws(()=>ai.validateParsedTransactions('{"intent":"transactions","transactions":[{"kind":"expense","amount":200,"description":"حديد"}]}','حديد',[],true),/لم يُحفظ/);
  assert.throws(()=>ai.validateParsedTransactions(JSON.stringify({intent:'transactions',transcript:'لكل عملية kind من expense',transactions:[{kind:'expense',amount:200,description:'حديد',priceBasis:'total'}]}),'حديد',[],true),/لم يُحفظ/);
 });
+
+test('Gemini uses a compact audio schema while preserving unit prices and the local 50-item limit',async()=>{
+ secure.set('gemini_api_key','test-only');let calls=0;
+ aiFetch=async(url,init)=>{calls++;const b=JSON.parse(init.body);const schema=b.generationConfig.responseSchema.properties.transactions;
+  assert.equal(schema.maxItems,undefined);assert.ok(schema.items.properties.priceBasis);assert.ok(schema.items.properties.quantity);
+  return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({transcript:'اتنين عصير الواحد بخمسة وعشرين',intent:'transactions',transactions:[{kind:'expense',amount:25,description:'عصير',priceBasis:'unit',quantity:2,unitPrice:25}]})}]}}]})};
+ };
+ try {const result=await ai.parseVoiceTransactions('AA==','m4a','gemini',[],'file:///test','gemini','2026-10-13');assert.equal(calls,1);assert.equal(result[0].amount,50);
+  assert.throws(()=>ai.validateParsedTransactions(JSON.stringify({transactions:Array.from({length:51},()=>({kind:'expense',amount:1,description:'قهوة'}))}),'قهوة',[]));
+ } finally {aiFetch=global.fetch;secure.clear();}
+});
+
+test('provider errors distinguish invalid keys, schema rejection and outages without exposing credentials',async()=>{
+ const errors=load('lib/aiErrors.ts');
+ assert.match(errors.apiErrorMessage(400,{error:{message:'API key not valid. Please pass a valid API key.'}}),/المفتاح/);
+ assert.match(errors.apiErrorMessage(400,{error:{message:'The specified schema produces a constraint that has too many states for serving.'}}),/إعدادات التحليل/);
+ assert.match(errors.apiErrorMessage(503,null),/مؤقتًا/);
+ aiFetch=async()=>({ok:false,status:400,json:async()=>({error:{message:'The specified schema has too many states; secret-key-example'}})});
+ try{await assert.rejects(()=>ai.testAIConnection('gemini','test-only'),e=>/إعدادات التحليل/.test(e.message)&&!e.message.includes('secret-key-example'));}finally{aiFetch=global.fetch;}
+});
+
+const viewport=load('lib/formViewport.ts');
+test('focused fields remain inside a clipped modal viewport as well as above the keyboard',()=>{
+ assert.equal(viewport.fieldScrollDelta(0,255,296,46,388,24),111);
+ assert.equal(viewport.fieldScrollDelta(0,255,180,46,388,24),0);
+ assert.equal(viewport.fieldScrollDelta(0,255,-20,46,388,24),-44);
+ assert.equal(viewport.fieldScrollDelta(0,730,400,46,388,24),82);
+});

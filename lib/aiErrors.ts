@@ -13,3 +13,20 @@ export function quotaMessage(body: any, retryAfter?: string | null): string {
   if (/PerMinute/i.test(ids)) return `وصلت إلى حد الطلبات أو الرموز في الدقيقة؛ هذا لا يعني انتهاء حصة اليوم.${wait} لم يُحفظ أي مصروف.`;
   return `المزوّد قيّد الطلب مؤقتًا أو بسبب الحصة؛ لا يمكن تأكيد انتهاء حد اليوم من هذا الرد.${wait} راجع حدود النموذج في حسابك. لم يُحفظ أي مصروف.`;
 }
+
+// Show actionable errors without echoing provider responses or credentials.
+export function apiErrorMessage(status: number, body: any, retryAfter?: string | null): string {
+  if (status === 429) return quotaMessage(body, retryAfter);
+  const message = String(body?.error?.message ?? "");
+  const details = JSON.stringify(body?.error?.details ?? []);
+  if (status === 401 || status === 403 || (status === 400 && /API_KEY_INVALID|API key not valid|invalid api key/i.test(message + details))) {
+    return "المفتاح غير صالح أو غير مسموح لهذا النموذج؛ راجعه في إعدادات الذكاء الاصطناعي. لم يُحفظ شيء.";
+  }
+  if (status === 404) return "النموذج غير متاح لحسابك؛ اختر نموذجًا متاحًا من الإعدادات. لم يُحفظ شيء.";
+  if (status === 400 && /schema|too many states|constraint/i.test(message)) {
+    return "رفض النموذج إعدادات التحليل؛ حدّث التطبيق أو اختر نموذجًا آخر. لم يُحفظ شيء.";
+  }
+  if (status === 400) return "رفضت الخدمة بيانات الطلب؛ جرّب تسجيلًا قصيرًا وواضحًا وراجع النموذج المختار. لم يُحفظ شيء.";
+  if (status >= 500) return "خدمة الذكاء الاصطناعي غير متاحة مؤقتًا؛ حاول لاحقًا. لم يُحفظ شيء.";
+  return `فشلت الخدمة (${status})؛ حاول مجددًا. لم يُحفظ شيء.`;
+}

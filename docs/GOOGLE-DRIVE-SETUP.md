@@ -15,4 +15,4 @@ References: https://react-native-google-signin.github.io/docs/original and https
 
 ## Private release publication
 
-Version 1.2.4 is publicly available and signed with the owner private certificate. The four HOSS signing Secrets have been verified by an actual successful build. Subsequent releases use **Validate and build release APK**, which publishes only after private-certificate verification and all native smoke/export checks pass. Update the app version/versionCode and workflow artifact/tag names for each new version. No signing key or password belongs in this repository.
+Version 1.2.5 is publicly available and signed with the owner private certificate. The four HOSS signing Secrets have been verified by an actual successful build. Subsequent releases use **Validate and build release APK**, which publishes only after private-certificate verification and all native smoke/export checks pass. Update the app version/versionCode and workflow artifact/tag names for each new version. No signing key or password belongs in this repository.
